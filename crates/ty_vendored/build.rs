@@ -45,6 +45,22 @@ fn write_zipped_typeshed_to(writer: File) -> ZipResult<File> {
         .compression_method(method)
         .unix_permissions(0o644);
 
+    // If TYPESHED_ALLOWLIST is set, only include stubs listed in that file.
+    // Each line is a module name (e.g., "builtins", "os.path").
+    // Special files (VERSIONS, @tests/) and ty_extensions are always included.
+    let allowlist: Option<std::collections::HashSet<String>> =
+        std::env::var("TYPESHED_ALLOWLIST")
+            .ok()
+            .map(|path| {
+                println!("cargo:rerun-if-changed={path}");
+                std::fs::read_to_string(&path)
+                    .unwrap_or_default()
+                    .lines()
+                    .filter(|l| !l.is_empty() && !l.starts_with('#'))
+                    .map(String::from)
+                    .collect()
+            });
+
     for entry in walkdir::WalkDir::new(TYPESHED_SOURCE_DIR) {
         let dir_entry = entry.unwrap();
         let absolute_path = dir_entry.path();
@@ -53,6 +69,61 @@ fn write_zipped_typeshed_to(writer: File) -> ZipResult<File> {
             .unwrap()
             .to_slash()
             .expect("Unexpected non-utf8 typeshed path!");
+
+        // Filter by allowlist if provided
+        if let Some(ref allowed) = allowlist {
+            if absolute_path.is_file() {
+                let rel = normalized_relative_path.as_ref();
+                // Always include VERSIONS and @tests
+                let dominated = rel == "stdlib/VERSIONS"
+                    || rel.starts_with("stdlib/@tests/");
+                if !dominated {
+                    // Convert path to module name: stdlib/os/__init__.pyi -> os
+                    let module = rel
+                        .strip_prefix("stdlib/")
+                        .unwrap_or(rel)
+                        .strip_suffix(".pyi")
+                        .unwrap_or(rel)
+                        .strip_suffix("/__init__")
+                        .unwrap_or(
+                            rel.strip_prefix("stdlib/")
+                                .unwrap_or(rel)
+                                .strip_suffix(".pyi")
+                                .unwrap_or(rel),
+                        )
+                        .replace('/', ".");
+                    // Check if this module or any parent is in the allowlist
+                    let mut found = false;
+                    let mut parts: &str = &module;
+                    loop {
+                        if allowed.contains(parts) {
+                            found = true;
+                            break;
+                        }
+                        match parts.rsplit_once('.') {
+                            Some((parent, _)) => parts = parent,
+                            None => break,
+                        }
+                    }
+                    if !found {
+                        continue;
+                    }
+                }
+            } else if !normalized_relative_path.is_empty() {
+                // For directories, check if any allowed module starts with this path
+                let dir_module = normalized_relative_path
+                    .strip_prefix("stdlib/")
+                    .unwrap_or(&normalized_relative_path)
+                    .replace('/', ".");
+                if !dir_module.is_empty()
+                    && !allowed.iter().any(|m| m.starts_with(&*dir_module) || dir_module.starts_with(&**m))
+                    && !normalized_relative_path.starts_with("stdlib/@tests")
+                    && normalized_relative_path != "stdlib"
+                {
+                    continue;
+                }
+            }
+        }
 
         // Write file or directory explicitly
         // Some unzip tools unzip files with directory paths correctly, some do not!
