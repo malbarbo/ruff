@@ -26,16 +26,7 @@ const TYPESHED_ZIP_LOCATION: &str = "/zipped_typeshed.zip";
 fn write_zipped_typeshed_to(writer: File) -> ZipResult<File> {
     let mut zip = ZipWriter::new(writer);
 
-    // Use deflated compression for WASM builds because compiling `zstd-sys` requires clang
-    // [source](https://github.com/gyscos/zstd-rs/wiki/Compile-for-WASM) which complicates the build
-    // by a lot. Deflated compression is slower but it shouldn't matter much for the WASM use case
-    // (WASM itself is already slower than a native build for a specific platform).
-    // We can't use `#[cfg(...)]` here because the target-arch in a build script is the
-    // architecture of the system running the build script and not the architecture of the build-target.
-    // That's why we use the `TARGET` environment variable here.
-    let method = if cfg!(feature = "zstd") {
-        CompressionMethod::Zstd
-    } else if cfg!(feature = "deflate") {
+    let method = if cfg!(feature = "deflate") {
         CompressionMethod::Deflated
     } else {
         CompressionMethod::Stored
@@ -43,6 +34,7 @@ fn write_zipped_typeshed_to(writer: File) -> ZipResult<File> {
 
     let options = FileOptions::default()
         .compression_method(method)
+        .compression_level(Some(9))
         .unix_permissions(0o644);
 
     // If TYPESHED_ALLOWLIST is set, only include stubs listed in that file.

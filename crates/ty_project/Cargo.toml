@@ -56,7 +56,7 @@ ruff_python_trivia = { workspace = true }
 insta = { workspace = true, features = ["redactions", "ron"] }
 
 [features]
-default = ["zstd"]
+default = ["deflate"]
 deflate = ["ty_vendored/deflate"]
 schemars = [
     "dep:schemars",
@@ -64,7 +64,6 @@ schemars = [
     "ruff_python_ast/schemars",
     "ty_python_semantic/schemars",
 ]
-zstd = ["ty_vendored/zstd"]
 junit = ["ruff_db/junit"]
 format = ["ruff_python_formatter"]
 testing = []

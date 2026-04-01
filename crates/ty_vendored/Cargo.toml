@@ -18,13 +18,12 @@ zip = { workspace = true }
 [build-dependencies]
 path-slash = { workspace = true }
 walkdir = { workspace = true }
-zip = { workspace = true, features = ["zstd", "deflate"] }
+zip = { workspace = true, features = ["deflate"] }
 
 [dev-dependencies]
 walkdir = { workspace = true }
 
 [features]
-zstd = ["zip/zstd"]
 deflate = ["zip/deflate"]
 
 [lints]
