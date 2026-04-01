@@ -65,7 +65,7 @@ ruff_db = { workspace = true, features = ["os", "testing"] }
 insta = { workspace = true, features = ["redactions", "ron"] }
 
 [features]
-default = ["zstd"]
+default = ["deflate"]
 deflate = ["ty_vendored/deflate"]
 schemars = [
     "dep:schemars",
@@ -75,7 +75,6 @@ schemars = [
     "ty_python_semantic/schemars",
     "ty_python_core/schemars",
 ]
-zstd = ["ty_vendored/zstd"]
 junit = ["ruff_db/junit"]
 format = ["ruff_python_formatter"]
 testing = []
