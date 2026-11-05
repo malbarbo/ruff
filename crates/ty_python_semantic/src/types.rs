@@ -162,6 +162,7 @@ mod iteration;
 mod known_instance;
 pub mod list_members;
 mod literal;
+pub mod lowering;
 mod match_pattern;
 mod member;
 mod method;
