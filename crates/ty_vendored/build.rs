@@ -39,16 +39,16 @@ const TYPESHED_ZIP_LOCATION: &str = "/zipped_typeshed.zip";
 fn write_zipped_typeshed_to(writer: File) -> ZipResult<File> {
     let mut zip = ZipWriter::new(writer);
 
-    let method = if cfg!(feature = "deflate") {
-        CompressionMethod::Deflated
-    } else {
-        CompressionMethod::Stored
-    };
-
+    // `Deflated` exists only when the feature turns on deflate in zip, and
+    // `Stored` takes no compression level.
+    #[cfg(feature = "deflate")]
     let options = SimpleFileOptions::default()
-        .compression_method(method)
-        .compression_level(Some(9))
-        .unix_permissions(0o644);
+        .compression_method(CompressionMethod::Deflated)
+        .compression_level(Some(9));
+    #[cfg(not(feature = "deflate"))]
+    let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+
+    let options = options.unix_permissions(0o644);
 
     // If TYPESHED_ALLOWLIST is set, only include stubs listed in that file.
     // Each line is a module name (e.g., "builtins", "os.path").
