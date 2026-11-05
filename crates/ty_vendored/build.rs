@@ -54,17 +54,15 @@ fn write_zipped_typeshed_to(writer: File) -> ZipResult<File> {
     // Each line is a module name (e.g., "builtins", "os.path").
     // Special files (VERSIONS, @tests/) and ty_extensions are always included.
     let allowlist: Option<std::collections::HashSet<String>> =
-        std::env::var("TYPESHED_ALLOWLIST")
-            .ok()
-            .map(|path| {
-                println!("cargo:rerun-if-changed={path}");
-                std::fs::read_to_string(&path)
-                    .unwrap_or_default()
-                    .lines()
-                    .filter(|l| !l.is_empty() && !l.starts_with('#'))
-                    .map(String::from)
-                    .collect()
-            });
+        std::env::var("TYPESHED_ALLOWLIST").ok().map(|path| {
+            println!("cargo:rerun-if-changed={path}");
+            std::fs::read_to_string(&path)
+                .unwrap_or_default()
+                .lines()
+                .filter(|l| !l.is_empty() && !l.starts_with('#'))
+                .map(String::from)
+                .collect()
+        });
 
     for entry in walkdir::WalkDir::new(TYPESHED_SOURCE_DIR) {
         let dir_entry = entry.unwrap();
@@ -80,8 +78,7 @@ fn write_zipped_typeshed_to(writer: File) -> ZipResult<File> {
             if absolute_path.is_file() {
                 let rel = normalized_relative_path.as_ref();
                 // Always include VERSIONS and @tests
-                let dominated = rel == "stdlib/VERSIONS"
-                    || rel.starts_with("stdlib/@tests/");
+                let dominated = rel == "stdlib/VERSIONS" || rel.starts_with("stdlib/@tests/");
                 if !dominated {
                     // Convert path to module name: stdlib/os/__init__.pyi -> os
                     let module = rel
@@ -121,7 +118,9 @@ fn write_zipped_typeshed_to(writer: File) -> ZipResult<File> {
                     .unwrap_or(&normalized_relative_path)
                     .replace('/', ".");
                 if !dir_module.is_empty()
-                    && !allowed.iter().any(|m| m.starts_with(&*dir_module) || dir_module.starts_with(&**m))
+                    && !allowed
+                        .iter()
+                        .any(|m| m.starts_with(&*dir_module) || dir_module.starts_with(&**m))
                     && !normalized_relative_path.starts_with("stdlib/@tests")
                     && normalized_relative_path != "stdlib"
                 {
