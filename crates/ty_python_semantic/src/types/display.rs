@@ -1200,6 +1200,14 @@ impl<'db> FmtDetailed<'db> for DisplayRepresentation<'_, 'db> {
                     (_, Some(KnownClass::NoDefaultType)) => {
                         f.with_type(self.ty).write_str("NoDefault")
                     }
+                    // With strict numbers, the annotation `float` means this type, so it
+                    // needs no mark.
+                    (_, Some(KnownClass::Float)) if self.env.program(db).strict_numbers(db) => {
+                        class
+                            .class_literal(self.db)
+                            .display_with(self.db, self.settings.clone())
+                            .fmt_detailed(f)
+                    }
                     (_, Some(KnownClass::Float | KnownClass::Complex)) => {
                         f.set_invalid_type_annotation();
                         class
