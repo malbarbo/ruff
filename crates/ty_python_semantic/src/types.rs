@@ -85,9 +85,10 @@ use crate::types::diagnostic::{
 pub use crate::types::display::{DisplaySettings, TypeDetail, TypeDisplayDetails};
 pub(crate) use crate::types::enums::{EnumClassLiteral, EnumComplementType, enum_metadata};
 pub(crate) use crate::types::equality::{ComparisonSoundnessPolicy, equality_truthiness};
+pub use crate::types::function::KnownFunction;
 use crate::types::function::{
     DataclassTransformerFlags, DataclassTransformerParams, FunctionDecorators, FunctionSpans,
-    FunctionType, KnownFunction, OverloadLiteral,
+    FunctionType, OverloadLiteral,
 };
 pub(crate) use crate::types::generics::GenericContext;
 use crate::types::generics::{ApplySpecialization, Specialization, bind_typevar};
@@ -3198,7 +3199,7 @@ impl<'db> Type<'db> {
             .is_some_and(LiteralValueType::is_int)
     }
 
-    fn as_int_literal(self) -> Option<i64> {
+    pub fn as_int_literal(self) -> Option<i64> {
         match self {
             Type::LiteralValue(literal) => literal.as_int(),
             _ => None,
