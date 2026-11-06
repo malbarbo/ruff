@@ -1387,7 +1387,18 @@ impl<'c, 'db> TypeRelationChecker<'_, 'c, 'db> {
             ) => self.check_tuple_type_pair(db, source_tuple, target_tuple),
             _ => {
                 let env = self.env;
-                self.check_class_pair(db, source.class(db, env), target.class(db, env))
+                let source = source.class(db, env);
+                let target = target.class(db, env);
+                // With strict numbers, a `bool` is not an `int`, so `def g() -> int: return
+                // 3 > 2` is an error. The rule covers subtyping too, because the solver for
+                // `xs: list[int] = [True]` would otherwise find `list[int]`.
+                if env.program(db).strict_numbers(db)
+                    && source.is_known(db, KnownClass::Bool)
+                    && target.is_known(db, KnownClass::Int)
+                {
+                    return self.never();
+                }
+                self.check_class_pair(db, source, target)
             }
         }
     }

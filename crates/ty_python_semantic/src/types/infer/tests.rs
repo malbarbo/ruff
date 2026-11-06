@@ -2137,3 +2137,83 @@ reveal_type(2.0)
     );
     Ok(())
 }
+
+#[test]
+fn strict_numbers_reject_a_bool_where_the_annotation_says_int_or_float() -> anyhow::Result<()> {
+    let source = r#"
+def g() -> int:
+    return 3 > 2
+
+def h(x: float) -> None: ...
+
+def k(b: bool, xs: list[int]) -> None:
+    a: int = True
+    ys: list[int] = [b]
+    zs: list[int] = [n > 0 for n in xs]
+    h(False)
+"#;
+    assert_eq!(
+        strict_numbers_messages(source, false)?,
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        strict_numbers_messages(source, true)?,
+        [
+            "Return type does not match returned value: expected `int`, found `Literal[True]`",
+            "Object of type `Literal[True]` is not assignable to `int`",
+            "Object of type `list[int | bool]` is not assignable to `list[int]`",
+            "Object of type `list[int | bool]` is not assignable to `list[int]`",
+            "Argument to function `h` is incorrect: Expected `float`, found `Literal[False]`",
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn strict_numbers_reject_the_arithmetic_of_a_bool() -> anyhow::Result<()> {
+    let source = r#"
+def f(p: bool, n: int) -> None:
+    print(p + 1, -p)
+    n += p
+"#;
+    assert_eq!(
+        strict_numbers_messages(source, false)?,
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        strict_numbers_messages(source, true)?,
+        [
+            "Operator `+` is not supported between objects of type `bool` and `Literal[1]`",
+            "Unary operator `-` is not supported for object of type `bool`",
+            "Operator `+=` is not supported between objects of type `int` and `bool`",
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn strict_numbers_keep_the_comparisons_and_the_logic_of_a_bool() -> anyhow::Result<()> {
+    let source = r#"
+from typing import reveal_type
+
+def f(p: bool, q: bool, n: int) -> None:
+    print(p < q, p >= n, 1 > p, p == q, p != n, p & q, p | q, not p, p and n > 0)
+    print(isinstance(p, int), hash(p), str(p), f"{p}", max(p, q), sum([p, q]))
+    reveal_type(p < q)
+
+def g(v: bool | int) -> None:
+    if isinstance(v, bool):
+        reveal_type(v)
+    else:
+        reveal_type(v)
+"#;
+    assert_eq!(
+        strict_numbers_messages(source, true)?,
+        [
+            "Revealed type: `bool`",
+            "Revealed type: `bool`",
+            "Revealed type: `int & ~bool`",
+        ]
+    );
+    Ok(())
+}

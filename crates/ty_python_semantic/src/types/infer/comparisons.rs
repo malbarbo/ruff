@@ -1554,6 +1554,22 @@ fn infer_rich_comparison<'db>(
 ) -> Result<Type<'db>, UnsupportedComparisonError<'db>> {
     let db = context.db();
     let env = &context.program_environment();
+    // With strict numbers, `bool` is not a subtype of `int` and loses the methods of `int`.
+    // An ordering still compares a `bool` as the `int` it stands for, so `False < True` checks.
+    let (left, right) = if env.program(db).strict_numbers(db)
+        && !matches!(op, RichCompareOperator::Eq | RichCompareOperator::Ne)
+    {
+        let bool_as_int = |ty: Type<'db>| {
+            if !ty.is_never() && ty.is_subtype_of(db, env, KnownClass::Bool.to_instance(db, env)) {
+                KnownClass::Int.to_instance(db, env)
+            } else {
+                ty
+            }
+        };
+        (bool_as_int(left), bool_as_int(right))
+    } else {
+        (left, right)
+    };
     Type::try_call_rich_comparison_dunder(
         db,
         env,
