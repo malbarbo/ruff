@@ -2139,6 +2139,25 @@ reveal_type(2.0)
 }
 
 #[test]
+fn strict_numbers_show_int_or_float_as_a_union() -> anyhow::Result<()> {
+    let source = r#"
+def f(u: int | float) -> float:
+    return u
+
+def g(u: type[int] | type[float]) -> type[float]:
+    return u
+"#;
+    assert_eq!(
+        strict_numbers_messages(source, true)?,
+        [
+            "Return type does not match returned value: expected `float`, found `int | float`",
+            "Return type does not match returned value: expected `type[float]`, found `type[int | float]`",
+        ]
+    );
+    Ok(())
+}
+
+#[test]
 fn strict_numbers_reject_a_bool_where_the_annotation_says_int_or_float() -> anyhow::Result<()> {
     let source = r#"
 def g() -> int:
