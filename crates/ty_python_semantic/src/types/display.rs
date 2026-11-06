@@ -3198,7 +3198,13 @@ const UNION_POLICY: TruncationPolicy = TruncationPolicy {
 /// ```python
 /// def f(value: str | float) -> None: ...
 /// ```
-fn numeric_tower_group(known_classes: impl IntoIterator<Item = KnownClass>) -> Option<KnownUnion> {
+///
+/// With strict numbers, the annotation `float` means `float` alone, so `int | float` has no
+/// shorter spelling.
+fn numeric_tower_group(
+    known_classes: impl IntoIterator<Item = KnownClass>,
+    strict_numbers: bool,
+) -> Option<KnownUnion> {
     let mut has_int = false;
     let mut has_float = false;
     let mut has_complex = false;
@@ -3214,7 +3220,7 @@ fn numeric_tower_group(known_classes: impl IntoIterator<Item = KnownClass>) -> O
 
     match (has_int, has_float, has_complex) {
         (true, true, true) => Some(KnownUnion::Complex),
-        (true, true, false) => Some(KnownUnion::Float),
+        (true, true, false) if !strict_numbers => Some(KnownUnion::Float),
         _ => None,
     }
 }
@@ -3266,11 +3272,14 @@ impl<'db> FmtDetailed<'db> for DisplayUnionType<'_, 'db> {
             NumericTowerDisplay::Canonical
         )
         .then(|| {
-            numeric_tower_group(elements.iter().filter_map(|element| {
-                element
-                    .as_nominal_instance()
-                    .and_then(|instance| instance.known_class(db))
-            }))
+            numeric_tower_group(
+                elements.iter().filter_map(|element| {
+                    element
+                        .as_nominal_instance()
+                        .and_then(|instance| instance.known_class(db))
+                }),
+                self.env.program(db).strict_numbers(db),
+            )
         })
         .flatten();
         let is_numeric_tower_element = |element: Type<'db>| {
@@ -3462,6 +3471,7 @@ impl<'db> FmtDetailed<'db> for DisplaySubclassOfGroup<'_, 'db> {
                 self.types
                     .iter()
                     .filter_map(|subclass_of| subclass_of_known_class(self.db, *subclass_of)),
+                self.env.program(db).strict_numbers(db),
             )
         })
         .flatten();
