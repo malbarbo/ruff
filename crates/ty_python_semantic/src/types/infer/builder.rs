@@ -164,6 +164,7 @@ mod annotation_expression;
 mod attribute_assignment;
 mod awaitable;
 mod binary_expressions;
+pub(crate) use binary_expressions::strict_pow_type;
 mod class;
 mod dict;
 mod dynamic_class;

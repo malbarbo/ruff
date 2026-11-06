@@ -2496,6 +2496,17 @@ impl<'db> Bindings<'db> {
                             }
                         }
 
+                        Some(KnownFunction::Pow) => {
+                            if let [Some(base), Some(exponent), modulus] =
+                                overload.parameter_types()
+                                && modulus.is_none_or(|modulus| modulus.is_none(db))
+                                && let Some(ty) =
+                                    crate::types::infer::strict_pow_type(db, env, *base, *exponent)
+                            {
+                                overload.set_return_type(ty);
+                            }
+                        }
+
                         Some(KnownFunction::Repr) => {
                             if let [Some(first_arg)] = overload.parameter_types() {
                                 overload.set_return_type(first_arg.repr(db, env));

@@ -751,6 +751,16 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
 
             (Type::Never, _, _) | (_, Type::Never, _) => Some(Type::Never),
 
+            // The literal arm below folds a power of two literals.
+            (left, right, ast::Operator::Pow)
+                if !matches!(
+                    (left, right),
+                    (Type::LiteralValue(_), Type::LiteralValue(_))
+                ) && let Some(ty) = strict_pow_type(db, env, left, right) =>
+            {
+                Some(ty)
+            }
+
             (Type::LiteralValue(left), Type::LiteralValue(right), _) => {
                 let recursively_defined = if left.recursively_defined().is_yes()
                     || right.recursively_defined().is_yes()
@@ -1285,4 +1295,75 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
 
         true
     }
+}
+
+/// Returns the type of `base ** exponent` under `strict_numbers` when both are `int`, `float`,
+/// or `bool`, and `None` otherwise.
+///
+/// The stubs give `Any` for an exponent that is not a small literal. Python decides the type by
+/// the sign of an `int` exponent, so `2 ** 3` is `8` and `2 ** -1` is `0.5`. A `bool` counts as
+/// an `int` that is never negative. A `float` exponent gives `float` because spython rejects the
+/// cases where Python gives a `complex`.
+pub(crate) fn strict_pow_type<'db>(
+    db: &'db dyn Db,
+    env: &ProgramEnvironment<'db>,
+    base: Type<'db>,
+    exponent: Type<'db>,
+) -> Option<Type<'db>> {
+    #[derive(Clone, Copy)]
+    enum Number {
+        IntLiteral(i64),
+        Int,
+        Bool,
+        Float,
+    }
+
+    if !env.program(db).strict_numbers(db) {
+        return None;
+    }
+    if let Type::Union(union) = base {
+        let mut builder = UnionBuilder::new(db, env);
+        for element in union.elements(db) {
+            builder = builder.add(strict_pow_type(db, env, *element, exponent)?);
+        }
+        return Some(builder.build());
+    }
+    if let Type::Union(union) = exponent {
+        let mut builder = UnionBuilder::new(db, env);
+        for element in union.elements(db) {
+            builder = builder.add(strict_pow_type(db, env, base, *element)?);
+        }
+        return Some(builder.build());
+    }
+
+    let number = |ty: Type<'db>| match ty {
+        Type::LiteralValue(literal) => match literal.kind() {
+            LiteralValueTypeKind::Int(n) => Some(Number::IntLiteral(n.as_i64())),
+            LiteralValueTypeKind::Bool(b) => Some(Number::IntLiteral(i64::from(b))),
+            _ => None,
+        },
+        Type::NominalInstance(instance) => match instance.known_class(db)? {
+            KnownClass::Int => Some(Number::Int),
+            KnownClass::Bool => Some(Number::Bool),
+            KnownClass::Float => Some(Number::Float),
+            _ => None,
+        },
+        _ => None,
+    };
+    let int = KnownClass::Int.to_instance(db, env);
+    let float = KnownClass::Float.to_instance(db, env);
+    Some(match (number(base)?, number(exponent)?) {
+        (Number::IntLiteral(_) | Number::Int | Number::Bool, Number::IntLiteral(m)) if m < 0 => {
+            float
+        }
+        (
+            Number::IntLiteral(_) | Number::Int | Number::Bool,
+            Number::IntLiteral(_) | Number::Bool,
+        ) => int,
+        (Number::IntLiteral(_) | Number::Int | Number::Bool, Number::Int) => {
+            UnionType::from_two_elements(db, env, int, float)
+        }
+        (Number::Float, Number::IntLiteral(_) | Number::Int | Number::Bool)
+        | (_, Number::Float) => float,
+    })
 }

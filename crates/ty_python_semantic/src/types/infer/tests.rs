@@ -2309,3 +2309,143 @@ def f(b: bool, c: C) -> None:
     );
     Ok(())
 }
+
+#[test]
+fn strict_numbers_give_a_power_the_type_of_its_result() -> anyhow::Result<()> {
+    let source = r#"
+from typing import reveal_type
+
+def f(n: int, m: int, x: float, y: float, b: bool, u: int | float) -> None:
+    reveal_type(n ** 2)
+    reveal_type(n ** 30)
+    reveal_type(2 ** 3)
+    reveal_type(n ** -1)
+    reveal_type(n ** -30)
+    reveal_type(2 ** -1)
+    reveal_type(n ** m)
+    reveal_type(2 ** n)
+    reveal_type(x ** 2)
+    reveal_type(x ** n)
+    reveal_type(x ** -1)
+    reveal_type(n ** x)
+    reveal_type(2 ** x)
+    reveal_type(x ** y)
+    reveal_type(x ** 0.5)
+    reveal_type(n ** u)
+    reveal_type(u ** n)
+    reveal_type(b ** n)
+    reveal_type(n ** b)
+    reveal_type(2 ** True)
+    reveal_type(True ** -1)
+    reveal_type(x ** b)
+"#;
+    assert_eq!(
+        strict_numbers_messages(source, true)?,
+        [
+            "Revealed type: `int`",
+            "Revealed type: `int`",
+            "Revealed type: `Literal[8]`",
+            "Revealed type: `float`",
+            "Revealed type: `float`",
+            "Revealed type: `float`",
+            "Revealed type: `int | float`",
+            "Revealed type: `int | float`",
+            "Revealed type: `float`",
+            "Revealed type: `float`",
+            "Revealed type: `float`",
+            "Revealed type: `float`",
+            "Revealed type: `float`",
+            "Revealed type: `float`",
+            "Revealed type: `float`",
+            "Revealed type: `int | float`",
+            "Revealed type: `int | float`",
+            "Revealed type: `int | float`",
+            "Revealed type: `int`",
+            "Revealed type: `Literal[2]`",
+            "Revealed type: `float`",
+            "Revealed type: `float`",
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn strict_numbers_reject_a_power_of_ints_where_the_annotation_says_int() -> anyhow::Result<()> {
+    let source = r#"
+def f(n: int, k: int) -> None:
+    a: int = 2 ** n
+    k **= n
+    c: int | float = 2 ** n
+"#;
+    assert_eq!(
+        strict_numbers_messages(source, true)?,
+        [
+            "Object of type `int | float` is not assignable to `int`",
+            "Object of type `int | float` is not assignable to `int`",
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn strict_numbers_keep_the_power_of_other_classes() -> anyhow::Result<()> {
+    let source = r#"
+from typing import TypeVar, reveal_type
+
+T = TypeVar("T", bound=int)
+
+class R:
+    def __rpow__(self, other: int) -> str:
+        return ""
+
+class MyInt(int):
+    def __pow__(self, other: int, mod: None = None) -> str:  # type: ignore
+        return ""
+
+def f(n: int, r: R, mi: MyInt, t: T) -> None:
+    reveal_type(n ** r)
+    reveal_type(mi ** n)
+    reveal_type(t ** 2)
+"#;
+    assert_eq!(
+        strict_numbers_messages(source, true)?,
+        [
+            "Revealed type: `str`",
+            "Revealed type: `str`",
+            "Revealed type: `int`",
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn strict_numbers_give_pow_the_type_of_a_power() -> anyhow::Result<()> {
+    let source = r#"
+from typing import reveal_type
+
+def f(n: int, m: int, x: float, y: float) -> None:
+    reveal_type(pow(n, m))
+    reveal_type(pow(x, y))
+    reveal_type(pow(n, -1))
+    reveal_type(pow(n, m, None))
+    reveal_type(pow(base=n, exp=m))
+    reveal_type(pow(n, m, 7))
+    reveal_type(pow(2, -1, 7))
+    p = pow
+    reveal_type(p(x, y))
+"#;
+    assert_eq!(
+        strict_numbers_messages(source, true)?,
+        [
+            "Revealed type: `int | float`",
+            "Revealed type: `float`",
+            "Revealed type: `float`",
+            "Revealed type: `int | float`",
+            "Revealed type: `int | float`",
+            "Revealed type: `int`",
+            "Revealed type: `int`",
+            "Revealed type: `float`",
+        ]
+    );
+    Ok(())
+}
