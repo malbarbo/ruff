@@ -1554,50 +1554,61 @@ fn infer_rich_comparison<'db>(
 ) -> Result<Type<'db>, UnsupportedComparisonError<'db>> {
     let db = context.db();
     let env = &context.program_environment();
-    // With strict numbers, `bool` is not a subtype of `int` and loses the methods of `int`.
-    // An ordering still compares a `bool` as the `int` it stands for, so `False < True` checks.
-    let (left, right) = if env.program(db).strict_numbers(db)
-        && !matches!(op, RichCompareOperator::Eq | RichCompareOperator::Ne)
-    {
-        let bool_as_int = |ty: Type<'db>| {
-            if !ty.is_never() && ty.is_subtype_of(db, env, KnownClass::Bool.to_instance(db, env)) {
-                KnownClass::Int.to_instance(db, env)
-            } else {
-                ty
-            }
-        };
-        (bool_as_int(left), bool_as_int(right))
-    } else {
-        (left, right)
+    let compare = |left, right| {
+        Type::try_call_rich_comparison_dunder(
+            db,
+            env,
+            left,
+            right,
+            op.dunder(),
+            op.reflect().dunder(),
+            policy,
+        )
     };
-    Type::try_call_rich_comparison_dunder(
-        db,
-        env,
-        left,
-        right,
-        op.dunder(),
-        op.reflect().dunder(),
-        policy,
-    )
-    .or_else(|| {
-        // When no appropriate method returns any value other than NotImplemented,
-        // the `==` and `!=` operators will fall back to `is` and `is not`, respectively.
-        // refer to `<https://docs.python.org/3/reference/datamodel.html#object.__eq__>`
-        if matches!(op, RichCompareOperator::Eq | RichCompareOperator::Ne)
+    compare(left, right)
+        .or_else(|| {
+            // With strict numbers, `bool` is not a subtype of `int` and loses the methods of
+            // `int`. An ordering still compares a `bool` as the `int` it stands for, so
+            // `False < True` checks.
+            if !env.program(db).strict_numbers(db)
+                || matches!(op, RichCompareOperator::Eq | RichCompareOperator::Ne)
+            {
+                return None;
+            }
+            let bool_as_int = |ty: Type<'db>| {
+                if !ty.is_never()
+                    && ty.is_subtype_of(db, env, KnownClass::Bool.to_instance(db, env))
+                {
+                    KnownClass::Int.to_instance(db, env)
+                } else {
+                    ty
+                }
+            };
+            let (int_left, int_right) = (bool_as_int(left), bool_as_int(right));
+            if int_left == left && int_right == right {
+                return None;
+            }
+            compare(int_left, int_right)
+        })
+        .or_else(|| {
+            // When no appropriate method returns any value other than NotImplemented,
+            // the `==` and `!=` operators will fall back to `is` and `is not`, respectively.
+            // refer to `<https://docs.python.org/3/reference/datamodel.html#object.__eq__>`
+            if matches!(op, RichCompareOperator::Eq | RichCompareOperator::Ne)
             // This branch implements specific behavior of the `__eq__` and `__ne__` methods
             // on `object`, so it does not apply if we skip looking up attributes on `object`.
             && !policy.mro_no_object_fallback()
-        {
-            Some(KnownClass::Bool.to_instance(db, env))
-        } else {
-            None
-        }
-    })
-    .ok_or_else(|| UnsupportedComparisonError {
-        op: op.into(),
-        left_ty: left,
-        right_ty: right,
-    })
+            {
+                Some(KnownClass::Bool.to_instance(db, env))
+            } else {
+                None
+            }
+        })
+        .ok_or_else(|| UnsupportedComparisonError {
+            op: op.into(),
+            left_ty: left,
+            right_ty: right,
+        })
 }
 
 /// Performs a membership test (`in` and `not in`) between two instances and returns the resulting type, or `None` if the test is unsupported.

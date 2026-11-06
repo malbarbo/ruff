@@ -2271,3 +2271,22 @@ def g(v: bool | int) -> None:
     );
     Ok(())
 }
+
+#[test]
+fn strict_numbers_try_the_bool_operand_of_an_ordering_as_it_is_first() -> anyhow::Result<()> {
+    let source = r#"
+from typing import reveal_type
+
+class C:
+    def __gt__(self, other: bool) -> str:
+        return ""
+
+def f(b: bool, c: C) -> None:
+    reveal_type(b < c)
+"#;
+    assert_eq!(
+        strict_numbers_messages(source, true)?,
+        ["Revealed type: `str`"]
+    );
+    Ok(())
+}
