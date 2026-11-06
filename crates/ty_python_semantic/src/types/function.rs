@@ -1559,7 +1559,7 @@ impl<'db> FunctionType<'db> {
         self.literal(db).name(db)
     }
 
-    pub(crate) fn known(self, db: &'db dyn Db) -> Option<KnownFunction> {
+    pub fn known(self, db: &'db dyn Db) -> Option<KnownFunction> {
         self.literal(db).known(db)
     }
 
@@ -2288,6 +2288,8 @@ pub enum KnownFunction {
     Len,
     /// `builtins.repr`
     Repr,
+    /// `builtins.pow`
+    Pow,
     /// `builtins.__import__`, which returns the top-level module.
     #[strum(serialize = "__import__")]
     DunderImport,
@@ -2431,6 +2433,7 @@ impl KnownFunction {
             | Self::HasAttr
             | Self::Len
             | Self::Repr
+            | Self::Pow
             | Self::DunderImport => module.is_builtins(),
             Self::AssertType
             | Self::AssertNever
@@ -2534,6 +2537,7 @@ pub(crate) mod tests {
             let module = match function {
                 KnownFunction::Len
                 | KnownFunction::Repr
+                | KnownFunction::Pow
                 | KnownFunction::IsInstance
                 | KnownFunction::HasAttr
                 | KnownFunction::IsSubclass
