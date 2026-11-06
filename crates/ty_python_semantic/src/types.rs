@@ -8916,9 +8916,15 @@ impl<'db> Type<'db> {
             Type::ClassLiteral(class) => {
                 let ty = match class.known(db) {
                     Some(KnownClass::Complex) => KnownUnion::Complex.to_type(db, env),
+                    // With strict numbers, the special case stays only in the parameters of a
+                    // stub, so `math.sqrt(2)` still checks and `x: float = 1` does not.
                     Some(KnownClass::Float)
                         if !inference_flags
-                            .contains(InferenceFlags::DISABLE_INT_FLOAT_SPECIAL_CASE) =>
+                            .contains(InferenceFlags::DISABLE_INT_FLOAT_SPECIAL_CASE)
+                            && (!env.program(db).strict_numbers(db)
+                                || (scope_id.file(db).is_stub(db)
+                                    && inference_flags
+                                        .contains(InferenceFlags::IN_PARAMETER_ANNOTATION))) =>
                     {
                         KnownUnion::Float.to_type(db, env)
                     }

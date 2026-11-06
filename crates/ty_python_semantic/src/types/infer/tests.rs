@@ -2069,3 +2069,71 @@ fn call_type_doesnt_rerun_when_only_callee_changed() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+/// The messages of the diagnostics for `source`, checked with `strict_numbers` set as given.
+fn strict_numbers_messages(source: &str, strict_numbers: bool) -> anyhow::Result<Vec<String>> {
+    let db = TestDbBuilder::new()
+        .with_file("src/main.py", source)
+        .build()?;
+    let file = system_path_to_file(&db, "src/main.py").expect("file to exist");
+    let mut settings = db.program_settings().clone();
+    settings.strict_numbers = strict_numbers;
+    let file = Program::from_settings(&db, &settings).program_file(&db, file);
+    Ok(crate::check_file_unwrap(&db, file)
+        .iter()
+        .map(|diagnostic| diagnostic.concise_message().to_string())
+        .collect())
+}
+
+#[test]
+fn strict_numbers_reject_an_int_where_the_annotation_says_float() -> anyhow::Result<()> {
+    let source = r#"
+from dataclasses import dataclass
+
+@dataclass
+class P:
+    x: float
+
+def f(x: float) -> float:
+    return 1
+
+a: float = 1
+f(2)
+P(3)
+"#;
+    assert_eq!(
+        strict_numbers_messages(source, false)?,
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        strict_numbers_messages(source, true)?,
+        [
+            "Return type does not match returned value: expected `float`, found `Literal[1]`",
+            "Object of type `Literal[1]` is not assignable to `float`",
+            "Argument to function `f` is incorrect: Expected `float`, found `Literal[2]`",
+            "Argument is incorrect: Expected `float`, found `Literal[3]`",
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn strict_numbers_keep_int_in_the_parameters_of_a_stub() -> anyhow::Result<()> {
+    let source = r#"
+import math
+from typing import reveal_type
+
+a: float = math.sqrt(2)
+b: float = 2.0 + 1
+reveal_type(2.0)
+"#;
+    assert_eq!(
+        strict_numbers_messages(source, true)?,
+        ["Revealed type: `float`"]
+    );
+    assert_eq!(
+        strict_numbers_messages(source, false)?,
+        ["Revealed type: `float*`"]
+    );
+    Ok(())
+}

@@ -283,6 +283,7 @@ fn run_test(
 
     let settings = ProgramSettings {
         python_environment: Ok(python_environment),
+        strict_numbers: false,
         python_version: PythonVersionWithSource {
             version: python_version,
             source: PythonVersionSource::Cli,

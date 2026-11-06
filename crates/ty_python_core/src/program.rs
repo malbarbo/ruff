@@ -21,6 +21,9 @@ pub struct Program<'db> {
 
     #[returns(copy)]
     pub resolver_environment: ResolverEnvironment<'db>,
+
+    #[returns(copy)]
+    pub strict_numbers: bool,
 }
 
 impl get_size2::GetSize for Program<'_> {}
@@ -33,11 +36,12 @@ impl<'db> Program<'db> {
             python_platform,
             search_paths,
             python_environment: _,
+            strict_numbers,
         } = settings;
 
         let resolver_environment =
             ResolverEnvironment::new(db, python_version.version, search_paths);
-        Program::new(db, python_platform, resolver_environment)
+        Program::new(db, python_platform, resolver_environment, *strict_numbers)
     }
 
     pub fn python_version(self, db: &'db dyn Db) -> PythonVersion {
@@ -65,6 +69,9 @@ pub struct ProgramSettings {
     /// The resolved Python environment. Queries must use this instead of resolving the environment
     /// again, so that changes invalidate their cached results.
     pub python_environment: Result<Option<PythonEnvironment>, PythonEnvironmentError>,
+    /// Whether an annotation `float` outside the parameters of a stub means `float` alone,
+    /// and not `int | float` as the typing spec says.
+    pub strict_numbers: bool,
 }
 
 impl ProgramSettings {
@@ -74,6 +81,7 @@ impl ProgramSettings {
             python_platform: PythonPlatform::default(),
             search_paths: SearchPaths::empty(vendored),
             python_environment: Ok(None),
+            strict_numbers: false,
         }
     }
 
