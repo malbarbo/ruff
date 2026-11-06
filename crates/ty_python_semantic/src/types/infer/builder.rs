@@ -11560,6 +11560,29 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
     ) -> Type<'db> {
         let db = self.db();
         let env = self.program_environment();
+        // Under `strict_numbers`, `bool` is not a subtype of `int` and has no `__neg__` or
+        // `__pos__` of its own, so `-b` reads `b` as an `int`, as CPython does. The literals have
+        // their own case below.
+        let operand_type = if env.program(db).strict_numbers(db)
+            && matches!(op, ast::UnaryOp::UAdd | ast::UnaryOp::USub)
+        {
+            let bool_as_int = |ty: &Type<'db>| {
+                if !ty.is_never()
+                    && ty.as_literal_value().is_none()
+                    && ty.is_subtype_of(db, env, KnownClass::Bool.to_instance(db, env))
+                {
+                    KnownClass::Int.to_instance(db, env)
+                } else {
+                    *ty
+                }
+            };
+            match operand_type {
+                Type::Union(union) => union.map(db, env, bool_as_int),
+                ty => bool_as_int(&ty),
+            }
+        } else {
+            operand_type
+        };
         let fallback_unary_expression_type = || {
             let unary_dunder_method = match op {
                 ast::UnaryOp::Invert => "__invert__",

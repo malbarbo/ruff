@@ -15,9 +15,9 @@ use crate::types::set_theoretic::RecursivelyDefined;
 use crate::types::tuple::{TupleSpecBuilder, TupleType};
 use crate::types::typevar::TypeVarConstraints;
 use crate::types::{
-    DynamicType, InternedConstraintSet, KnownClass, KnownInstanceType, LiteralValueTypeKind,
-    MemberLookupPolicy, Type, TypeContext, TypeVarBoundOrConstraints, TypedDictType, UnionBuilder,
-    UnionType, UnionTypeInstance,
+    DynamicType, InternedConstraintSet, KnownClass, KnownInstanceType, LiteralValueType,
+    LiteralValueTypeKind, MemberLookupPolicy, Type, TypeContext, TypeVarBoundOrConstraints,
+    TypedDictType, UnionBuilder, UnionType, UnionTypeInstance,
 };
 
 enum BinaryExpressionOperandTypes<'db> {
@@ -1191,8 +1191,58 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                 | Type::TypeForm(_)
                 | Type::TypedDict(_),
                 op,
-            ) => self.infer_binary_dunder(state, left_ty, op, right_ty),
+            ) => self
+                .infer_binary_dunder(state, left_ty, op, right_ty)
+                .or_else(|| {
+                    self.infer_binary_dunder_with_bool_as_int(state, left_ty, op, right_ty)
+                }),
         }
+    }
+
+    /// Retries an integer operator with every `bool` operand read as an `int`.
+    ///
+    /// Under `strict_numbers`, `bool` is not a subtype of `int`, so it has no `int` methods and
+    /// `b + 1` finds no `__add__`. The original operands go first, so a class that accepts a
+    /// `bool` in `__radd__` keeps its own result.
+    fn infer_binary_dunder_with_bool_as_int(
+        &mut self,
+        state: &mut BinaryInferenceState<'db>,
+        left_ty: Type<'db>,
+        op: ast::Operator,
+        right_ty: Type<'db>,
+    ) -> Option<Type<'db>> {
+        let db = self.db();
+        let env = self.program_environment();
+        if !env.program(db).strict_numbers(db)
+            || !matches!(
+                op,
+                ast::Operator::Add
+                    | ast::Operator::Sub
+                    | ast::Operator::Mult
+                    | ast::Operator::Div
+                    | ast::Operator::FloorDiv
+                    | ast::Operator::Mod
+                    | ast::Operator::Pow
+                    | ast::Operator::LShift
+                    | ast::Operator::RShift
+            )
+        {
+            return None;
+        }
+        let bool_as_int = |ty: Type<'db>| {
+            if ty.is_never() || !ty.is_subtype_of(db, env, KnownClass::Bool.to_instance(db, env)) {
+                return ty;
+            }
+            match ty.as_literal_value().and_then(LiteralValueType::as_bool) {
+                Some(value) => Type::int_literal(i64::from(value)),
+                None => KnownClass::Int.to_instance(db, env),
+            }
+        };
+        let (left, right) = (bool_as_int(left_ty), bool_as_int(right_ty));
+        if left == left_ty && right == right_ty {
+            return None;
+        }
+        self.infer_binary_dunder(state, left, op, right)
     }
 
     /// Raise a diagnostic if the given type cannot be divided by zero.

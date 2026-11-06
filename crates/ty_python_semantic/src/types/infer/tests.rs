@@ -2170,23 +2170,77 @@ def k(b: bool, xs: list[int]) -> None:
 }
 
 #[test]
-fn strict_numbers_reject_the_arithmetic_of_a_bool() -> anyhow::Result<()> {
+fn strict_numbers_read_a_bool_operand_of_an_integer_operator_as_an_int() -> anyhow::Result<()> {
     let source = r#"
-def f(p: bool, n: int) -> None:
-    print(p + 1, -p)
-    n += p
+from typing import reveal_type
+
+def f(b: bool, x: int, u: bool | int, n: int) -> None:
+    reveal_type(b + b)
+    reveal_type(x * b)
+    reveal_type(b / 2)
+    reveal_type(1.5 + b)
+    reveal_type(x << b)
+    reveal_type(b ** 2)
+    reveal_type(-b)
+    reveal_type(+b)
+    reveal_type(-u)
+    reveal_type(u + 1)
+    reveal_type(True * "ab")
+    n += b
+    reveal_type(n)
 "#;
-    assert_eq!(
-        strict_numbers_messages(source, false)?,
-        Vec::<String>::new()
-    );
     assert_eq!(
         strict_numbers_messages(source, true)?,
         [
-            "Operator `+` is not supported between objects of type `bool` and `Literal[1]`",
-            "Unary operator `-` is not supported for object of type `bool`",
-            "Operator `+=` is not supported between objects of type `int` and `bool`",
+            "Revealed type: `int`",
+            "Revealed type: `int`",
+            "Revealed type: `float`",
+            "Revealed type: `float`",
+            "Revealed type: `int`",
+            "Revealed type: `int`",
+            "Revealed type: `int`",
+            "Revealed type: `int`",
+            "Revealed type: `int`",
+            "Revealed type: `int`",
+            "Revealed type: `LiteralString`",
+            "Revealed type: `int`",
         ]
+    );
+    Ok(())
+}
+
+#[test]
+fn strict_numbers_keep_the_other_errors_of_a_bool_operand() -> anyhow::Result<()> {
+    let source = r#"
+def f(b: bool, x: int, w: bool) -> None:
+    print(x @ b)
+    w += 1
+"#;
+    assert_eq!(
+        strict_numbers_messages(source, true)?,
+        [
+            "Operator `@` is not supported between objects of type `int` and `bool`",
+            "Object of type `int` is not assignable to `bool`",
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn strict_numbers_try_the_bool_operand_as_it_is_first() -> anyhow::Result<()> {
+    let source = r#"
+from typing import reveal_type
+
+class C:
+    def __radd__(self, other: bool) -> str:
+        return ""
+
+def f(b: bool, c: C) -> None:
+    reveal_type(b + c)
+"#;
+    assert_eq!(
+        strict_numbers_messages(source, true)?,
+        ["Revealed type: `str`"]
     );
     Ok(())
 }
