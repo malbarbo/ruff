@@ -6,8 +6,12 @@
 use ruff_db::files::File;
 use ruff_python_ast as ast;
 use ruff_text_size::{Ranged, TextRange};
+use ty_python_core::ast_ids::HasScopedUseId;
 use ty_python_core::{place_table, semantic_index};
 
+use crate::place::{
+    implicit_builtins_symbol, module_type_implicit_global_symbol, place_from_bindings,
+};
 use crate::semantic_model::{HasType, SemanticModel};
 use crate::types::class::CodeGeneratorKind;
 use crate::types::enums::enum_metadata;
@@ -168,6 +172,38 @@ pub fn slot_shape(model: &SemanticModel<'_>, target: &ast::Expr) -> Option<Shape
         }
         _ => None,
     }
+}
+
+/// Returns `true` if the scope of `name` binds the name on every path that
+/// reaches the read, `false` otherwise. The bindings of other scopes, such as
+/// the builtins, do not count.
+pub fn is_definitely_bound(model: &SemanticModel<'_>, name: &ast::ExprName) -> bool {
+    let db = model.db();
+    let file = model.program_file();
+    let Some(scope) = model.scope(name.into()) else {
+        return false;
+    };
+    let use_def = semantic_index(db, file).use_def_map(scope);
+    place_from_bindings(
+        db,
+        &model.program_environment(),
+        use_def.bindings_at_use(name.scoped_use_id(db, file)),
+    )
+    .place
+    .is_definitely_bound()
+}
+
+/// Returns `true` if a read in the module that finds no binding of `name` in
+/// the module finds one among the builtins or the globals that every module
+/// has, such as `__name__`, `false` otherwise.
+pub fn is_implicit_global(model: &SemanticModel<'_>, name: &str) -> bool {
+    let db = model.db();
+    !module_type_implicit_global_symbol(db, model.program_file(), name)
+        .place
+        .is_undefined()
+        || !implicit_builtins_symbol(db, &model.program_environment(), name)
+            .place
+            .is_undefined()
 }
 
 pub fn function_info(
@@ -823,5 +859,58 @@ a = first([1, 2])
 a
 ";
         assert_eq!(shapes_of(source, "a"), [Shape::Int]);
+    }
+
+    #[test]
+    fn a_name_is_definitely_bound_where_every_path_binds_it() {
+        let source = "\
+def f() -> int: ...
+x = f()
+x
+if x > 0:
+    y = 1
+y
+z = 1
+del z
+z
+while x < 3:
+    w = 1
+    w
+";
+        let mut found = Vec::new();
+        with_model(source, |model, module| {
+            struct Names<'a, 'm> {
+                model: &'a SemanticModel<'m>,
+                found: &'a mut Vec<(String, bool)>,
+            }
+            impl<'a> SourceOrderVisitor<'a> for Names<'_, '_> {
+                fn visit_stmt(&mut self, stmt: &'a ast::Stmt) {
+                    if let ast::Stmt::Expr(e) = stmt
+                        && let ast::Expr::Name(n) = &*e.value
+                    {
+                        self.found
+                            .push((n.id.to_string(), is_definitely_bound(self.model, n)));
+                    }
+                    source_order::walk_stmt(self, stmt);
+                }
+            }
+            Names {
+                model,
+                found: &mut found,
+            }
+            .visit_body(&module.body);
+        });
+        let expected = [("x", true), ("y", false), ("z", false), ("w", true)];
+        let expected: Vec<_> = expected.iter().map(|(n, b)| (n.to_string(), *b)).collect();
+        assert_eq!(found, expected);
+    }
+
+    #[test]
+    fn the_builtins_and_the_module_attributes_are_implicit_globals() {
+        with_model("", |model, _| {
+            for (name, expected) in [("len", true), ("__name__", true), ("x", false)] {
+                assert_eq!(is_implicit_global(model, name), expected, "{name}");
+            }
+        });
     }
 }
