@@ -2958,7 +2958,9 @@ impl<'db> Type<'db> {
         )
     }
 
-    fn has_dynamic(self, db: &'db dyn Db, env: &ProgramEnvironment<'db>) -> bool {
+    /// Returns `true` if this type is dynamic or has a dynamic type inside it, as `list[Any]`
+    /// does, `false` otherwise.
+    pub fn has_dynamic(self, db: &'db dyn Db, env: &ProgramEnvironment<'db>) -> bool {
         any_over_type(db, env, self, false, |ty| ty.is_dynamic())
     }
 
