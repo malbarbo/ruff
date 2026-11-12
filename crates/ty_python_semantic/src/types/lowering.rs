@@ -528,6 +528,12 @@ fn shape<'db>(db: &'db dyn Db, env: &ProgramEnvironment<'db>, ty: Type<'db>) -> 
             Shape::Float
         }
         Type::Union(u) => Shape::Union(u.elements(db).iter().map(|t| shape(db, env, *t)).collect()),
+        // A test such as `x == 0` narrows `int` to `int & ~Literal[0]`. The
+        // negative part only removes values, so the value keeps its shape.
+        Type::Intersection(i) => match i.positive(db).iter().collect::<Vec<_>>().as_slice() {
+            [one] => shape(db, env, **one),
+            _ => Shape::Other(ty.display(db, env).to_string()),
+        },
         Type::ClassLiteral(c) => Shape::Class(class_id(db, c)),
         Type::GenericAlias(a) => Shape::Class(class_id(db, ClassLiteral::Static(a.origin(db)))),
         Type::FunctionLiteral(f) => {
@@ -691,6 +697,29 @@ def f(r: int | None) -> int:
             shapes_of(source, "r"),
             [Shape::Union(vec![Shape::Int, Shape::None]), Shape::Int]
         );
+    }
+
+    #[test]
+    fn narrowing_by_equality_keeps_the_shape() {
+        let source = "\
+def f(r: int | None, s: str) -> int:
+    if r is None:
+        return 0
+    if r == 0 or s == '':
+        raise ValueError
+    r; s
+    return r
+";
+        assert_eq!(
+            shapes_of(source, "r"),
+            [
+                Shape::Union(vec![Shape::Int, Shape::None]),
+                Shape::Int,
+                Shape::Int,
+                Shape::Int
+            ]
+        );
+        assert_eq!(shapes_of(source, "s"), [Shape::Str, Shape::Str]);
     }
 
     #[test]
