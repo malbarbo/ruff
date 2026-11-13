@@ -2139,6 +2139,27 @@ reveal_type(2.0)
 }
 
 #[test]
+fn strict_numbers_keep_float_in_a_type_that_a_call_infers() -> anyhow::Result<()> {
+    let source = r#"
+from typing import reveal_type
+
+def f(xs: list[float]) -> None:
+    reveal_type(set(xs))
+    reveal_type(list(xs))
+    reveal_type(set([1.0]))
+"#;
+    assert_eq!(
+        strict_numbers_messages(source, true)?,
+        [
+            "Revealed type: `set[float]`",
+            "Revealed type: `list[float]`",
+            "Revealed type: `set[float]`",
+        ]
+    );
+    Ok(())
+}
+
+#[test]
 fn strict_numbers_show_int_or_float_as_a_union() -> anyhow::Result<()> {
     let source = r#"
 def f(u: int | float) -> float:
