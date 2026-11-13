@@ -10176,7 +10176,10 @@ impl<'db> Type<'db> {
             {
                 match instance.known_class(db) {
                     Some(KnownClass::Complex) => KnownUnion::Complex.to_type(db, visitor.env),
-                    Some(KnownClass::Float) => KnownUnion::Float.to_type(db, visitor.env),
+                    // With strict numbers, a `float` stays a `float`, as its annotation does.
+                    Some(KnownClass::Float) if !visitor.env.program(db).strict_numbers(db) => {
+                        KnownUnion::Float.to_type(db, visitor.env)
+                    }
                     _ => instance.apply_type_mapping_impl(db, type_mapping, tcx, visitor),
                 }
             }
