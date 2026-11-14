@@ -1331,6 +1331,32 @@ impl<'db> Specialization<'db> {
         )
     }
 
+    /// Replaces a `Divergent` type argument, or a `Divergent` member of a union type argument,
+    /// with `Never`.
+    pub(super) fn without_divergent_arguments(
+        self,
+        db: &'db dyn Db,
+        env: &ProgramEnvironment<'db>,
+    ) -> Self {
+        let types = self.map_types(db, |_, _, ty| {
+            if ty.is_divergent() {
+                Type::Never
+            } else {
+                ty.filter_union(db, env, |member| !member.is_divergent())
+            }
+        });
+        if matches!(types, Cow::Borrowed(_)) {
+            return self;
+        }
+        Self::new(
+            db,
+            self.generic_context(db),
+            types.into_owned().into_boxed_slice(),
+            self.materialization_kind(db),
+            self.tuple_inner(db),
+        )
+    }
+
     /// Restricts this specialization to only include the typevars in a generic context. If the
     /// specialization does not include all of those typevars, returns `None`.
     pub(crate) fn restrict(

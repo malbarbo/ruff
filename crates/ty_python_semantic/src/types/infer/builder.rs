@@ -9566,6 +9566,11 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
     ) -> Option<Type<'db>> {
         let db = self.db();
         let env = self.program_environment();
+        // An argument read from the collection itself, as in `xs.append(xs[0])`, has the
+        // `Divergent` type of the cycle until the cycle settles. The constraints of each
+        // iteration stay, so a `Divergent` here would stay in the type of the literal. It says
+        // nothing about the items, and becomes `Never`.
+        let call_specialization = call_specialization.without_divergent_arguments(db, env);
         let constraint = identity_instance.apply_specialization(db, call_specialization);
         let Some(receiver_generic_context) = receiver_generic_context else {
             return Some(constraint);
