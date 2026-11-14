@@ -3162,6 +3162,29 @@ x13.append(x13)
 reveal_type(x13)  # revealed: list[Divergent]
 ```
 
+An item read from the collection itself adds no constraint of its own, so the elements of the
+literal decide:
+
+```py
+x13a = [1]
+x13a.append(x13a[0])
+reveal_type(x13a)  # revealed: list[int]
+
+x13b = [1]
+y13b = x13b[0]
+x13b.append(y13b)
+reveal_type(x13b)  # revealed: list[int]
+
+x13c = {"a": 1}
+x13c["b"] = x13c["a"]
+reveal_type(x13c)  # revealed: dict[str, int]
+
+def _(flag: bool):
+    x13d = [1]
+    x13d.append(x13d[0] if flag else "a")
+    reveal_type(x13d)  # revealed: list[str | int]
+```
+
 ```py
 x14 = []
 x15 = []
