@@ -2139,6 +2139,29 @@ reveal_type(2.0)
 }
 
 #[test]
+fn an_empty_literal_takes_the_upper_bound_of_a_covariant_context() -> anyhow::Result<()> {
+    let source = r#"
+from typing import Iterable, reveal_type
+
+def g(xs: Iterable[int]) -> list[int]:
+    ys: list[int] = []
+    ys[0:] = xs
+    return ys
+
+def f(xs: list[int]) -> None:
+    ys: Iterable[str] = []
+    reveal_type(ys)
+    xs[0:1] = []
+    reveal_type(g([]))
+"#;
+    assert_eq!(
+        strict_numbers_messages(source, true)?,
+        ["Revealed type: `list[str]`", "Revealed type: `list[int]`",]
+    );
+    Ok(())
+}
+
+#[test]
 fn strict_numbers_keep_float_in_a_type_that_a_call_infers() -> anyhow::Result<()> {
     let source = r#"
 from typing import reveal_type

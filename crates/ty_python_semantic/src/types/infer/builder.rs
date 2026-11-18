@@ -8073,6 +8073,13 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                 .get(&elt_ty_identity)
                 .is_some_and(|variance| variance.is_covariant())
             {
+                // An empty literal has no element to infer from, so it takes the upper bound,
+                // as `[]` takes `list[int]` for an `Iterable[int]`, and not `list[Unknown]`.
+                if elts.is_empty()
+                    && let Some(elt_tcx) = elt_tcx
+                {
+                    builder.add_type_mapping(elt_ty, elt_tcx, TypeVarVariance::Invariant);
+                }
                 continue;
             }
 
