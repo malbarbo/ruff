@@ -18,7 +18,7 @@ use crate::types::class::CodeGeneratorKind;
 use crate::types::enums::enum_metadata;
 use crate::types::literal::LiteralValueTypeKind;
 use crate::types::set_theoretic::KnownUnion;
-use crate::types::{ClassBase, ClassLiteral, ClassType, KnownClass, Type};
+use crate::types::{ClassBase, ClassLiteral, ClassType, KnownClass, KnownInstanceType, Type};
 use crate::{Db, ProgramEnvironment};
 
 /// A class, named by where it is defined.
@@ -63,6 +63,9 @@ pub enum Shape {
     TypeVar(String),
     Union(Vec<Shape>),
     Module(String),
+    /// A value that stands for a type in an annotation, as `A | B`, a
+    /// `NewType` or the alias of a `type` statement.
+    TypeForm,
     Never,
     Any,
     Other(String),
@@ -590,6 +593,16 @@ fn shape<'db>(db: &'db dyn Db, env: &ProgramEnvironment<'db>, ty: Type<'db>) -> 
         }
         Type::TypeVar(tv) => Shape::TypeVar(tv.typevar(db).name(db).to_string()),
         Type::ModuleLiteral(_) => Shape::Module(ty.display(db, env).to_string()),
+        Type::KnownInstance(
+            KnownInstanceType::TypeAliasType(_)
+            | KnownInstanceType::UnionType(_)
+            | KnownInstanceType::NewType(_)
+            | KnownInstanceType::Literal(_)
+            | KnownInstanceType::Annotated(_)
+            | KnownInstanceType::TypeGenericAlias(_)
+            | KnownInstanceType::Callable(_)
+            | KnownInstanceType::LiteralStringAlias(_),
+        ) => Shape::TypeForm,
         Type::NewTypeInstance(newtype) => shape(db, env, newtype.concrete_base_type(db)),
         Type::TypeAlias(alias) => shape(db, env, alias.value_type(db)),
         Type::Never => Shape::Never,
@@ -963,6 +976,21 @@ def f(i: Id, n: Name) -> None:
             shapes_of(source, "n"),
             [Shape::Union(vec![Shape::Str, Shape::None])]
         );
+    }
+
+    #[test]
+    fn a_value_that_stands_for_a_type_is_a_type_form() {
+        let source = "\
+from typing import Literal, NewType
+type Alias = int | str
+Union = int | str
+Id = NewType('Id', int)
+Dir = Literal['N', 'S']
+Alias; Union; Id; Dir
+";
+        for name in ["Alias", "Union", "Id", "Dir"] {
+            assert_eq!(shapes_of(source, name), [Shape::TypeForm], "{name}");
+        }
     }
 
     #[test]
