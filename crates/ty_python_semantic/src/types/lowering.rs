@@ -127,7 +127,7 @@ pub struct ArgBinding {
 }
 
 /// The shape of `expr` at the point where it appears, after narrowing.
-pub fn expr_shape(model: &SemanticModel<'_>, expr: &ast::Expr) -> Option<Shape> {
+pub fn expr_shape<T: HasType + ?Sized>(model: &SemanticModel<'_>, expr: &T) -> Option<Shape> {
     let ty = expr.inferred_type(model)?;
     Some(shape(model.db(), &model.program_environment(), ty))
 }
