@@ -10010,7 +10010,8 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
         if let ast::Expr::Attribute(attribute @ ast::ExprAttribute { value, .. }) = func.as_ref() {
             let value_type = self.expression_type(value);
 
-            if let Some(collection_def) = self.index.unannotated_collection_initializer(value)
+            if !arguments.args.iter().any(is_empty_collection_literal)
+                && let Some(collection_def) = self.index.unannotated_collection_initializer(value)
                 && let Some((collection_literal, _)) = value_type.class_specialization(db, env)
             {
                 let identity_instance =
@@ -13654,4 +13655,15 @@ impl<'db, 'ast> AddBinding<'db, 'ast> {
 enum BoundOrConstraintsNodes<'ast> {
     Bound(&'ast ast::Expr),
     Constraints(&'ast [ast::Expr]),
+}
+
+/// Returns `true` if `expr` is `[]` or `{}`, `false` otherwise. Such an argument says nothing
+/// about the items of a collection that a call or an assignment uses, as in `xs.append([])` or
+/// `xs[0:1] = []`, and takes its own type from the collection.
+pub(super) fn is_empty_collection_literal(expr: &ast::Expr) -> bool {
+    match expr {
+        ast::Expr::List(list) => list.elts.is_empty(),
+        ast::Expr::Dict(dict) => dict.items.is_empty(),
+        _ => false,
+    }
 }

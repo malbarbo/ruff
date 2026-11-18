@@ -3185,6 +3185,23 @@ def _(flag: bool):
     reveal_type(x13d)  # revealed: list[str | int]
 ```
 
+An empty literal in a use adds no constraint of its own, and takes its type from the collection:
+
+```py
+x13e = [[1]]
+x13e.append([])
+x13e[0] = []
+reveal_type(x13e)  # revealed: list[list[int]]
+
+x13f = [1, 2]
+x13f[1:] = []
+reveal_type(x13f)  # revealed: list[int]
+
+x13g = {"a": [1]}
+x13g["b"] = []
+reveal_type(x13g)  # revealed: dict[str, list[int]]
+```
+
 ```py
 x14 = []
 x15 = []
