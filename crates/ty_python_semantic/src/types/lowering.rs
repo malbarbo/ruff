@@ -590,6 +590,8 @@ fn shape<'db>(db: &'db dyn Db, env: &ProgramEnvironment<'db>, ty: Type<'db>) -> 
         }
         Type::TypeVar(tv) => Shape::TypeVar(tv.typevar(db).name(db).to_string()),
         Type::ModuleLiteral(_) => Shape::Module(ty.display(db, env).to_string()),
+        Type::NewTypeInstance(newtype) => shape(db, env, newtype.concrete_base_type(db)),
+        Type::TypeAlias(alias) => shape(db, env, alias.value_type(db)),
         Type::Never => Shape::Never,
         Type::Dynamic(_) => Shape::Any,
         _ => Shape::Other(ty.display(db, env).to_string()),
@@ -945,6 +947,22 @@ f('a')
             assert!(call_bindings(model, call).is_none());
             assert_eq!(expr_shape(model, &stmt.value), Some(Shape::Str));
         });
+    }
+
+    #[test]
+    fn a_new_type_and_a_type_alias_have_the_shape_of_their_type() {
+        let source = "\
+from typing import NewType
+Id = NewType('Id', int)
+type Name = str | None
+def f(i: Id, n: Name) -> None:
+    i; n
+";
+        assert_eq!(shapes_of(source, "i"), [Shape::Int]);
+        assert_eq!(
+            shapes_of(source, "n"),
+            [Shape::Union(vec![Shape::Str, Shape::None])]
+        );
     }
 
     #[test]
