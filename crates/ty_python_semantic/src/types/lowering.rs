@@ -227,9 +227,10 @@ pub fn function_info(
     let Type::FunctionLiteral(f) = def.inferred_type(model)? else {
         return None;
     };
-    let sig = f.signature(db);
-    let overload = sig.overloads.iter().next()?;
-    let params = overload
+    // The signature of the `def` itself, which is the implementation of an
+    // overloaded function.
+    let sig = f.last_definition_signature(db);
+    let params = sig
         .parameters()
         .iter()
         .map(|p| Param {
@@ -241,7 +242,7 @@ pub fn function_info(
     Some(FunctionInfo {
         id: def_id(db, f.definition(db), f.name(db).as_str()),
         params,
-        ret: shape(db, &env, overload.return_ty),
+        ret: shape(db, &env, sig.return_ty),
     })
 }
 
@@ -385,10 +386,20 @@ pub fn call_target(model: &SemanticModel<'_>, call: &ast::ExprCall) -> Option<Ca
 }
 
 /// For each argument of `call`, the parameter that takes it, with the
-/// parameter's type after the call specializes it.
+/// parameter's type after the call specializes it. `None` for a call of an
+/// overloaded function with an implementation, whose arguments the checker
+/// binds to the parameters of an overload and not of the implementation.
 pub fn call_bindings(model: &SemanticModel<'_>, call: &ast::ExprCall) -> Option<Vec<ArgBinding>> {
     let db = model.db();
     let env = model.program_environment();
+    let function = match call.func.inferred_type(model)? {
+        Type::FunctionLiteral(f) => Some(f),
+        Type::BoundMethod(m) => m.function(db),
+        _ => None,
+    };
+    if function.is_some_and(|f| f.literal(db).has_separate_implementation(db)) {
+        return None;
+    }
     let details = crate::types::ide_support::resolved_call_signature(model, call)?;
     Some(
         details
@@ -906,6 +917,33 @@ f(1).m(k=2)
             };
             assert_eq!(def.name, "f");
             assert_eq!(attribute_owner(model, attr).unwrap().name, "A");
+        });
+    }
+
+    #[test]
+    fn an_overloaded_function_has_the_signature_of_its_implementation() {
+        let source = "\
+from typing import overload
+@overload
+def f(x: int) -> int: ...
+@overload
+def f(x: str) -> str: ...
+def f(x: int | str) -> int | str:
+    return x
+f('a')
+";
+        with_model(source, |model, module| {
+            let def = module.body[3].as_function_def_stmt().unwrap();
+            let info = function_info(model, def).unwrap();
+            let union = Shape::Union(vec![Shape::Int, Shape::Str]);
+            assert_eq!(info.params[0].shape, union);
+            assert_eq!(info.ret, union);
+            let ast::Stmt::Expr(stmt) = &module.body[4] else {
+                panic!()
+            };
+            let call = stmt.value.as_call_expr().unwrap();
+            assert!(call_bindings(model, call).is_none());
+            assert_eq!(expr_shape(model, &stmt.value), Some(Shape::Str));
         });
     }
 
