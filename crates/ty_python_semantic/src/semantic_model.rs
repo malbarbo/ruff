@@ -25,12 +25,12 @@ use crate::types::list_members::{all_members, all_reachable_members};
 use crate::types::{
     CycleDetector, ProgramEnvironment, SpecialFormType, Type, TypeQualifiers, binding_type,
     infer_complete_scope_types, infer_definition_types, inferred_declaration,
-    is_discarded_dict_key_assignment,
+    inherited_class_body_declaration, is_discarded_dict_key_assignment,
 };
 use ty_python_core::definition::{Definition, DefinitionKind};
 use ty_python_core::place::PlaceExpr;
 use ty_python_core::place_table;
-use ty_python_core::scope::{FileScopeId, Scope};
+use ty_python_core::scope::{FileScopeId, NodeWithScopeRef, Scope};
 use ty_python_core::semantic_index;
 use ty_python_core::symbol::Symbol;
 use ty_python_core::{Program, ProgramFile};
@@ -393,6 +393,22 @@ impl<'db> SemanticModel<'db> {
         let table = place_table(self.db, scope);
         let place = table.place(definition.place(self.db));
         place.as_symbol().is_some_and(Symbol::is_reassigned)
+    }
+
+    /// Returns `true` if the body of `class` assigns `name` without declaring
+    /// it, and a base of `class`, directly or not, declares `name` with an
+    /// annotation in its body, `false` otherwise. The assignment then takes the
+    /// declared type of the base.
+    pub fn inherits_class_body_declaration(&self, class: &ast::StmtClassDef, name: &str) -> bool {
+        let file = self.program_file();
+        let scope = semantic_index(self.db, file)
+            .node_scope(NodeWithScopeRef::Class(class))
+            .to_scope_id(self.db, file);
+        place_table(self.db, scope)
+            .symbol_id(name)
+            .is_some_and(|symbol| {
+                inherited_class_body_declaration(self.db, scope, symbol).is_some()
+            })
     }
 
     /// Returns the scope in which `node` is defined (handles string annotations).

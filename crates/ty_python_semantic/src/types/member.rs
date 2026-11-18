@@ -60,7 +60,7 @@ impl<'db> Member<'db> {
 /// The declaring class is retained even when several declarations contribute to the member's
 /// type, or an unannotated default inherits the annotation through an intermediate base.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, get_size2::GetSize, salsa::SalsaValue)]
-pub(super) struct ClassBodyDeclaration<'db> {
+pub(crate) struct ClassBodyDeclaration<'db> {
     pub(super) member: PlaceAndQualifiers<'db>,
     pub(super) class: StaticClassLiteral<'db>,
 }
@@ -150,7 +150,7 @@ pub(super) fn class_member_with_symbol<'db>(
 /// declaration. Both initializer inference and public member lookup use that declaration,
 /// while an explicit annotation or a new method definition supplies its own public type.
 #[salsa::tracked(returns(copy), cycle_initial=|_, _, _, _| None, heap_size=ruff_memory_usage::heap_size)]
-pub(super) fn inherited_class_body_declaration<'db>(
+pub(crate) fn inherited_class_body_declaration<'db>(
     db: &'db dyn Db,
     scope: ScopeId<'db>,
     symbol: ScopedSymbolId,
