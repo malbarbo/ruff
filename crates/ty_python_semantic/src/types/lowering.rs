@@ -7,6 +7,7 @@ use ruff_db::files::File;
 use ruff_python_ast as ast;
 use ruff_text_size::{Ranged, TextRange};
 use ty_python_core::ast_ids::HasScopedUseId;
+use ty_python_core::definition::Definition;
 use ty_python_core::{place_table, semantic_index};
 
 use crate::place::{
@@ -151,16 +152,7 @@ pub fn slot_shape(model: &SemanticModel<'_>, target: &ast::Expr) -> Option<Shape
     match target {
         ast::Expr::Name(name) => {
             let index = semantic_index(db, model.program_file());
-            let def = *index.definitions(name).first()?;
-            let use_def = ty_python_core::use_def_map(db, def.scope(db));
-            let declared = crate::place::place_from_declarations(
-                db,
-                &env,
-                use_def.declarations_at_binding(def),
-            )
-            .ignore_conflicting_declarations();
-            let ty = declared.place.ignore_possibly_undefined()?;
-            Some(shape(db, &env, ty))
+            declared_at(model, *index.definitions(name).first()?)
         }
         ast::Expr::Attribute(attr) => {
             let receiver = attr.value.inferred_type(model)?;
@@ -172,6 +164,26 @@ pub fn slot_shape(model: &SemanticModel<'_>, target: &ast::Expr) -> Option<Shape
         }
         _ => None,
     }
+}
+
+/// The declared shape of the name that `named` assigns, as [`slot_shape`]
+/// gives it for the target of an assignment. The definition of a `:=` is
+/// the node of the `:=`, not of its target.
+pub fn named_shape(model: &SemanticModel<'_>, named: &ast::ExprNamed) -> Option<Shape> {
+    let index = semantic_index(model.db(), model.program_file());
+    declared_at(model, *index.definitions(named).first()?)
+}
+
+/// The shape that the declarations of the place of `def` give at `def`.
+fn declared_at(model: &SemanticModel<'_>, def: Definition<'_>) -> Option<Shape> {
+    let db = model.db();
+    let env = model.program_environment();
+    let use_def = ty_python_core::use_def_map(db, def.scope(db));
+    let declared =
+        crate::place::place_from_declarations(db, &env, use_def.declarations_at_binding(def))
+            .ignore_conflicting_declarations();
+    let ty = declared.place.ignore_possibly_undefined()?;
+    Some(shape(db, &env, ty))
 }
 
 /// Returns `true` if the scope of `name` binds the name on every path that
