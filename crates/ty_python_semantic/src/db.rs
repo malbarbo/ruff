@@ -320,6 +320,7 @@ pub(crate) mod tests {
             let program_settings = ProgramSettings {
                 python_environment: Ok(None),
                 strict_numbers: false,
+                literal_declarations: false,
                 python_version: PythonVersionWithSource {
                     version: self.python_version,
                     source: PythonVersionSource::default(),

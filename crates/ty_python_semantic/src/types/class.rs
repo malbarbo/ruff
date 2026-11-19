@@ -36,7 +36,9 @@ use crate::types::function::DataclassTransformerParams;
 use crate::types::generics::{GenericContext, Specialization, walk_specialization};
 use crate::types::infer::infer_definition_types;
 use crate::types::known_instance::DeprecatedInstance;
-use crate::types::member::{ClassBodyDeclaration, Member, inherited_class_body_declaration};
+use crate::types::member::{
+    ClassBodyDeclaration, Member, inherited_class_body_declaration, literal_class_body_declaration,
+};
 use crate::types::mro::{Mro, StaticMroError};
 use crate::types::relation::{
     DisjointnessChecker, HasRelationToVisitor, IsDisjointVisitor, TypeRelation, TypeRelationChecker,
@@ -2967,7 +2969,14 @@ impl<'db, I: Iterator<Item = ClassBase<'db>>> MroLookup<'db, I> {
                 }) {
                     continue;
                 }
-                inherited_class_body_declaration(db, scope, symbol)
+                inherited_class_body_declaration(db, scope, symbol).or_else(|| {
+                    literal_class_body_declaration(db, scope, symbol).map(|member| {
+                        ClassBodyDeclaration {
+                            member,
+                            class: base,
+                        }
+                    })
+                })
             } else {
                 (!declared.qualifiers.contains(TypeQualifiers::FINAL)
                     && declarations.contains_only_annotated_assignments(db))
