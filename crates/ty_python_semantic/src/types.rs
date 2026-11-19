@@ -166,7 +166,7 @@ mod literal;
 pub mod lowering;
 mod match_pattern;
 mod member;
-pub(crate) use member::inherited_class_body_declaration;
+pub(crate) use member::{inherited_class_body_declaration, literal_class_body_declaration};
 mod method;
 mod mro;
 pub(crate) mod narrow;

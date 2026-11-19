@@ -26,6 +26,7 @@ use crate::types::{
     CycleDetector, ProgramEnvironment, SpecialFormType, Type, TypeQualifiers, binding_type,
     infer_complete_scope_types, infer_definition_types, inferred_declaration,
     inherited_class_body_declaration, is_discarded_dict_key_assignment,
+    literal_class_body_declaration,
 };
 use ty_python_core::definition::{Definition, DefinitionKind};
 use ty_python_core::place::PlaceExpr;
@@ -409,6 +410,18 @@ impl<'db> SemanticModel<'db> {
             .is_some_and(|symbol| {
                 inherited_class_body_declaration(self.db, scope, symbol).is_some()
             })
+    }
+
+    /// Returns `true` if the body of `class` binds `name` once to a literal that declares its
+    /// type under `literal_declarations`, `false` otherwise.
+    pub fn declares_by_literal(&self, class: &ast::StmtClassDef, name: &str) -> bool {
+        let file = self.program_file();
+        let scope = semantic_index(self.db, file)
+            .node_scope(NodeWithScopeRef::Class(class))
+            .to_scope_id(self.db, file);
+        place_table(self.db, scope)
+            .symbol_id(name)
+            .is_some_and(|symbol| literal_class_body_declaration(self.db, scope, symbol).is_some())
     }
 
     /// Returns the scope in which `node` is defined (handles string annotations).
