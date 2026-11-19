@@ -958,7 +958,7 @@ f('a')
             };
             let call = stmt.value.as_call_expr().unwrap();
             assert!(call_bindings(model, call).is_none());
-            assert_eq!(expr_shape(model, &stmt.value), Some(Shape::Str));
+            assert_eq!(expr_shape(model, &*stmt.value), Some(Shape::Str));
         });
     }
 
