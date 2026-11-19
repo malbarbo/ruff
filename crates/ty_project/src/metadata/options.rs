@@ -385,6 +385,7 @@ impl Options {
                     None => Ok(python_environment),
                 },
                 strict_numbers: false,
+                literal_declarations: false,
             },
             diagnostics,
         ))

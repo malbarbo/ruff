@@ -2684,3 +2684,91 @@ def f(n: int, m: int, x: float, y: float) -> None:
     );
     Ok(())
 }
+
+/// The messages of the diagnostics for `source`, checked with `literal_declarations` set as
+/// given.
+fn literal_declarations_messages(
+    source: &str,
+    literal_declarations: bool,
+) -> anyhow::Result<Vec<String>> {
+    let db = TestDbBuilder::new()
+        .with_file("src/main.py", source)
+        .build()?;
+    let file = system_path_to_file(&db, "src/main.py").expect("file to exist");
+    let mut settings = db.program_settings().clone();
+    settings.literal_declarations = literal_declarations;
+    let file = Program::from_settings(&db, &settings).program_file(&db, file);
+    Ok(crate::check_file_unwrap(&db, file)
+        .iter()
+        .map(|diagnostic| diagnostic.concise_message().to_string())
+        .collect())
+}
+
+#[test]
+fn literal_declarations_check_an_override_against_a_literal_of_the_base() -> anyhow::Result<()> {
+    let source = r#"
+class C:
+    name = "a"
+    n = -1
+    x = 1.5
+    ok = True
+    t = ("a", "b")
+    xs = ["a"]
+    s = {"a"}
+
+class D(C):
+    name: int = 3
+    n = "b"
+    x = 2.5
+    ok = f"{1}"
+    t = ("c", "d")
+    xs = ["b", "c"]
+    s = {1}
+"#;
+    assert_eq!(
+        literal_declarations_messages(source, false)?,
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        literal_declarations_messages(source, true)?,
+        [
+            "Invalid override of attribute `name`: Type `int` is not assignable to inherited type `str`",
+            "Object of type `Literal[\"b\"]` is not assignable to `int`",
+            "Object of type `Literal[\"1\"]` is not assignable to `bool`",
+            "Object of type `set[str | int]` is not assignable to `set[str]`",
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn literal_declarations_leave_a_declaration_of_the_base_in_charge() -> anyhow::Result<()> {
+    let source = r#"
+from enum import Enum
+from typing import reveal_type
+
+class A:
+    name: str | None = None
+
+class B(A):
+    name = "a"
+
+class Color(Enum):
+    RED = 1
+
+class Twice:
+    n = 1
+    n = 2
+
+class Later(Twice):
+    n = "a"
+
+def f(b: B) -> None:
+    b.name = None
+    reveal_type(Color.RED)
+"#;
+    let messages = literal_declarations_messages(source, true)?;
+    assert_eq!(messages, literal_declarations_messages(source, false)?);
+    assert_eq!(messages, ["Revealed type: `Color`"]);
+    Ok(())
+}
