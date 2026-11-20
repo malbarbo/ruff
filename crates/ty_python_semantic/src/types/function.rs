@@ -2290,6 +2290,8 @@ pub enum KnownFunction {
     Repr,
     /// `builtins.pow`
     Pow,
+    /// `builtins.sum`
+    Sum,
     /// `builtins.__import__`, which returns the top-level module.
     #[strum(serialize = "__import__")]
     DunderImport,
@@ -2434,6 +2436,7 @@ impl KnownFunction {
             | Self::Len
             | Self::Repr
             | Self::Pow
+            | Self::Sum
             | Self::DunderImport => module.is_builtins(),
             Self::AssertType
             | Self::AssertNever
@@ -2538,6 +2541,7 @@ pub(crate) mod tests {
                 KnownFunction::Len
                 | KnownFunction::Repr
                 | KnownFunction::Pow
+                | KnownFunction::Sum
                 | KnownFunction::IsInstance
                 | KnownFunction::HasAttr
                 | KnownFunction::IsSubclass
