@@ -556,6 +556,23 @@ fn shape<'db>(db: &'db dyn Db, env: &ProgramEnvironment<'db>, ty: Type<'db>) -> 
                 _ => Shape::Instance(class_id(db, class.class_literal(db)), args),
             }
         }
+        // An instance of a protocol of a class, as `Iterator[int]`, has the
+        // class and the type arguments of the class.
+        Type::ProtocolInstance(protocol) => match protocol.class_origin(db) {
+            Some(class) => {
+                let args = match *class {
+                    ClassType::Generic(alias) => alias
+                        .specialization(db)
+                        .types(db)
+                        .iter()
+                        .map(|t| shape(db, env, *t))
+                        .collect(),
+                    ClassType::NonGeneric(_) => Vec::new(),
+                };
+                Shape::Instance(class_id(db, class.class_literal(db)), args)
+            }
+            None => Shape::Other(ty.display(db, env).to_string()),
+        },
         // With strict numbers, `float` means `float` alone, and `int | float` is a union.
         Type::Union(u)
             if u.known(db) == Some(KnownUnion::Float) && !env.program(db).strict_numbers(db) =>
