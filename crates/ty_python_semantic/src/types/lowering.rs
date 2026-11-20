@@ -556,6 +556,11 @@ fn shape<'db>(db: &'db dyn Db, env: &ProgramEnvironment<'db>, ty: Type<'db>) -> 
                 _ => Shape::Instance(class_id(db, class.class_literal(db)), args),
             }
         }
+        // A `range` whose emptiness the checker knows is an instance of
+        // `range`.
+        Type::KnownInstance(known @ KnownInstanceType::Range { .. }) => {
+            shape(db, env, known.instance_fallback(db, env))
+        }
         // An instance of a protocol of a class, as `Iterator[int]`, has the
         // class and the type arguments of the class.
         Type::ProtocolInstance(protocol) => match protocol.class_origin(db) {
