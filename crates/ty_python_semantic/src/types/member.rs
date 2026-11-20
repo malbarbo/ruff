@@ -248,10 +248,11 @@ pub(crate) fn literal_class_body_declaration<'db>(
     Some(Place::declared(ty).with_definition(definition).into())
 }
 
-/// Returns the type that `value` declares for a class attribute under `literal_declarations`, or
-/// `None` if `value` is not one of these literals: a `str`, an `int` or a `float`, with or without
-/// a minus, a `bool`, or a tuple, list or set of `str` literals that is not empty.
-fn literal_declared_type<'db>(
+/// Returns the type that `value` declares for a class attribute or the default of a lambda
+/// parameter under `literal_declarations`, or `None` if `value` is not one of these literals: a
+/// `str`, an `int` or a `float`, with or without a minus, a `bool`, or a tuple, list or set of
+/// `str` literals that is not empty.
+pub(crate) fn literal_declared_type<'db>(
     db: &'db dyn Db,
     env: &ProgramEnvironment<'db>,
     value: &ast::Expr,

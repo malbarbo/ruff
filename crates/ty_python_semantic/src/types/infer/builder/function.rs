@@ -45,6 +45,7 @@ use crate::{
         },
         infer_definition_types,
         list_members::all_members,
+        member::literal_declared_type,
         relation::TypeRelation,
         signatures::{ReturnCallableTypeVarScope, function_signature_expression_type},
         tuple::{TupleSpec, TupleSpecBuilder, TupleType},
@@ -1404,6 +1405,8 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
 
         let ty = if let Some(parameter_type) = self.annotated_lambda_parameter_type(index, lambda) {
             parameter_type
+        } else if let Some(declared_ty) = self.lambda_default_declared_type(default.as_deref()) {
+            declared_ty
         } else if let Some(default_expr) = default {
             let default_ty = self.file_expression_type(default_expr);
             UnionType::from_two_elements(
@@ -1418,6 +1421,23 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
 
         self.add_binding(parameter.into(), definition)
             .insert(self, ty);
+    }
+
+    /// Returns the type that the default of a lambda parameter declares under
+    /// `literal_declarations`, or `None` if it declares none.
+    ///
+    /// `lambda x, k=2: x * k` gives `k` the type `int`, as `k: int = 2` would, where ty would give
+    /// it `Unknown | Literal[2]`.
+    pub(super) fn lambda_default_declared_type(
+        &self,
+        default: Option<&ast::Expr>,
+    ) -> Option<Type<'db>> {
+        let db = self.db();
+        let env = self.program_environment();
+        if !env.program(db).literal_declarations(db) {
+            return None;
+        }
+        literal_declared_type(db, env, default?)
     }
 
     /// Set initial declared/inferred types for a `*args` variadic positional parameter

@@ -9355,7 +9355,11 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                                 .replace_parameter_defaults(db, env)
                         }));
 
-                    if let Some(annotated_type) = parameter_types.next().flatten() {
+                    if let Some(annotated_type) = parameter_types
+                        .next()
+                        .flatten()
+                        .or_else(|| self.lambda_default_declared_type(param.default()))
+                    {
                         parameter.with_annotated_type(annotated_type)
                     } else {
                         parameter
@@ -9373,7 +9377,11 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                                 .replace_parameter_defaults(db, env)
                         }));
 
-                    if let Some(annotated_type) = parameter_types.next().flatten() {
+                    if let Some(annotated_type) = parameter_types
+                        .next()
+                        .flatten()
+                        .or_else(|| self.lambda_default_declared_type(param.default()))
+                    {
                         parameter.with_annotated_type(annotated_type)
                     } else {
                         parameter
@@ -9388,12 +9396,17 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                 .kwonlyargs
                 .iter()
                 .map(|param| {
-                    Parameter::keyword_only(param.name().id.clone())
+                    let parameter = Parameter::keyword_only(param.name().id.clone())
                         .with_inferred_type(Type::Dynamic(DynamicType::UnknownLambdaParameter))
                         .with_optional_default_type(param.default().map(|default_expr| {
                             self.infer_expression(default_expr, TypeContext::default())
                                 .replace_parameter_defaults(db, env)
-                        }))
+                        }));
+                    if let Some(declared_ty) = self.lambda_default_declared_type(param.default()) {
+                        parameter.with_annotated_type(declared_ty)
+                    } else {
+                        parameter
+                    }
                 })
                 .collect::<Vec<_>>();
             let keyword_variadic = parameters.kwarg.as_ref().map(|param| {

@@ -2772,3 +2772,30 @@ def f(b: B) -> None:
     assert_eq!(messages, ["Revealed type: `Color`"]);
     Ok(())
 }
+
+#[test]
+fn literal_declarations_give_a_lambda_parameter_the_type_of_its_default() -> anyhow::Result<()> {
+    let source = r#"
+from typing import Callable, reveal_type
+
+f = lambda x, k=2, *, s="a": (reveal_type(k), reveal_type(s))
+reveal_type(f)
+g: Callable[[int], int] = lambda x, k=2: x * reveal_type(k)
+h: Callable[[int, float], float] = lambda x, k=2: x * reveal_type(k)
+u = lambda x, k=[1]: reveal_type(k)
+f(1, "b")
+"#;
+    assert_eq!(
+        literal_declarations_messages(source, true)?,
+        [
+            "Revealed type: `int`",
+            "Revealed type: `str`",
+            "Revealed type: `(x, k: int = 2, *, s: str = \"a\") -> tuple[int, str]`",
+            "Revealed type: `int`",
+            "Revealed type: `float`",
+            "Revealed type: `Unknown | list[int]`",
+            "Argument is incorrect: Expected `int`, found `Literal[\"b\"]`",
+        ]
+    );
+    Ok(())
+}

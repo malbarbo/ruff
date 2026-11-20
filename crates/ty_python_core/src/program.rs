@@ -83,7 +83,9 @@ pub struct ProgramSettings {
     /// and not `int | float` as the typing spec says.
     pub strict_numbers: bool,
     /// Whether an unannotated class attribute bound once to a literal, such as `name = "a"`,
-    /// declares the type of the literal, as `name: str = "a"` would.
+    /// declares the type of the literal, as `name: str = "a"` would. The literal default of a
+    /// lambda parameter that has no type from its context declares the type of the parameter in
+    /// the same way.
     pub literal_declarations: bool,
 }
 
