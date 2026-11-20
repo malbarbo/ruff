@@ -175,3 +175,35 @@ reveal_type(x.__kwdefaults__)  # revealed: dict[str, Any] | None
 reveal_type(x.__module__)  # revealed: str
 reveal_type(x.__qualname__)  # revealed: str
 ```
+
+## Parameters in an overloaded call
+
+When several overloads accept a call and agree on the types of the parameters of a lambda, the
+lambda takes those types, and its body decides which overload matches. An overload that leaves a
+parameter unknown does not disagree with the others.
+
+```py
+from typing import Callable, Iterable, TypeGuard, TypeVar, overload
+
+S = TypeVar("S")
+T = TypeVar("T")
+
+@overload
+def keep(fn: Callable[[S], TypeGuard[T]], it: Iterable[S]) -> list[T]: ...
+@overload
+def keep(fn: Callable[[T], object], it: Iterable[T]) -> list[T]: ...
+def keep(fn: object, it: object) -> list[int]:
+    return []
+
+def identity(it: Iterable[T]) -> list[T]:
+    return list(it)
+
+# revealed: int
+reveal_type(keep(lambda x: reveal_type(x) > 1, [1, 2]))  # revealed: list[int]
+# revealed: int
+reveal_type(filter(lambda x: reveal_type(x) > 1, [1, 2]))  # revealed: filter[int]
+# revealed: int
+reveal_type(list(filter(lambda x: reveal_type(x) > 1, [1, 2])))  # revealed: list[int]
+# revealed: int
+reveal_type(identity(filter(lambda x: reveal_type(x) > 1, [1, 2])))  # revealed: list[int]
+```

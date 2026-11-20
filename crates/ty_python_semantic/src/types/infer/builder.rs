@@ -6700,10 +6700,13 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                     // speculative mode, infer the argument without type context as the
                     // default inference.
                     if mode.requires_default_inference() {
-                        let inferred_ty = infer_argument_ty(
-                            self,
-                            (argument_index, ast_argument, TypeContext::default()),
-                        );
+                        let tcx = if ast_argument.is_lambda_expr() {
+                            self.shared_lambda_parameters_context(argument_tcx)
+                        } else {
+                            TypeContext::default()
+                        };
+                        let inferred_ty =
+                            infer_argument_ty(self, (argument_index, ast_argument, tcx));
 
                         argument_types.insert_type(
                             argument_index,
@@ -6764,6 +6767,61 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                 }
             }
         }
+    }
+
+    /// Returns the context of a lambda argument with the parameter types that the overloads give
+    /// it, and no return type, or no context if two overloads disagree on a parameter. An overload
+    /// that leaves a parameter unknown does not disagree.
+    ///
+    /// The parameter of a lambda takes its type from the context in which the call commits the
+    /// lambda, so without this context `filter(lambda x: x > 1, [1, 2])` leaves `x` unknown, and
+    /// the unknown body then matches the `TypeGuard` overload of `filter`.
+    fn shared_lambda_parameters_context(
+        &self,
+        contexts: &[Option<ArgumentTypeContext<'db>>],
+    ) -> TypeContext<'db> {
+        let db = self.db();
+        let env = self.program_environment();
+        let parameters = |context: &Option<ArgumentTypeContext<'db>>| {
+            let expected = context.as_ref()?.type_context().expected_type()?;
+            let callable = expected
+                .filter_union(db, env, Type::is_callable_type)
+                .resolve_type_alias(db)
+                .as_callable()?;
+            let [signature] = callable.signatures(db).overloads.as_slice() else {
+                return None;
+            };
+            let parameters = signature.parameters().clone();
+            (!parameters
+                .iter()
+                .any(|parameter| parameter.annotated_type().is_provisional_marker()))
+            .then_some(parameters)
+        };
+        let Some(all) = contexts.iter().map(parameters).collect::<Option<Vec<_>>>() else {
+            return TypeContext::default();
+        };
+        let Some(known) = all.iter().find(|parameters| {
+            !parameters
+                .iter()
+                .any(|parameter| parameter.annotated_type().is_dynamic())
+        }) else {
+            return TypeContext::default();
+        };
+        let agrees = |other: &Parameters<'db>| {
+            other.len() == known.len()
+                && other.iter().zip(known.iter()).all(|(other, known)| {
+                    let other = other.annotated_type();
+                    other.is_dynamic() || other == known.annotated_type()
+                })
+        };
+        if !all.iter().all(agrees) {
+            return TypeContext::default();
+        }
+        TypeContext::preference(Some(Type::Callable(CallableType::new(
+            db,
+            CallableSignature::single(Signature::new(known.clone(), Type::unknown())),
+            CallableTypeKind::Regular,
+        ))))
     }
 
     fn infer_maybe_standalone_statement(&mut self, statement: &ast::Stmt) {
