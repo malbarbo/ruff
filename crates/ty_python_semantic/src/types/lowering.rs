@@ -99,6 +99,9 @@ pub struct Field {
 pub struct ClassInfo {
     pub id: ClassId,
     pub mro: Vec<ClassId>,
+    /// The instances of the first base, with its type arguments, as
+    /// `Iter[T]` for `class ListIter[T](Iter[T])`.
+    pub base: Option<Shape>,
     pub methods: Vec<Method>,
     /// Attributes bound on `self` in a method of this class, in the order of
     /// first binding.
@@ -263,6 +266,11 @@ pub fn class_info(model: &SemanticModel<'_>, def: &ast::StmtClassDef) -> Option<
         })
         .collect();
 
+    let base = class.iter_mro(db).nth(1).and_then(|base| match base {
+        ClassBase::Class(c) => Some(shape(db, &env, Type::instance(db, &env, c))),
+        _ => None,
+    });
+
     let static_class = class.as_static()?;
     let body = static_class.body_scope(db);
     let mut methods = Vec::new();
@@ -355,6 +363,7 @@ pub fn class_info(model: &SemanticModel<'_>, def: &ast::StmtClassDef) -> Option<
     Some(ClassInfo {
         id: class_id(db, class),
         mro: mro.iter().map(|c| class_id(db, *c)).collect(),
+        base,
         methods,
         instance_attributes,
         dataclass_fields,
