@@ -23,10 +23,10 @@ pub use semantic_model::{
     Completion, ExpectedStringLiteralCompletion, HasDefinition, HasType, NameKind, SemanticModel,
 };
 use std::hash::BuildHasherDefault;
-pub use suppression::suppress_single;
 pub(crate) use suppression::{
     SuppressFix, UNUSED_IGNORE_COMMENT, is_unused_ignore_comment_lint, suppress_all,
 };
+pub use suppression::{is_suppression_comment, suppress_single};
 use ty_module_resolver::ModuleGlobSet;
 pub use ty_python_core::Program;
 use ty_python_core::ProgramFile;

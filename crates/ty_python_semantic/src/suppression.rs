@@ -85,6 +85,13 @@ pub(crate) fn is_unused_ignore_comment_lint(name: LintName) -> bool {
     name == UNUSED_IGNORE_COMMENT.name() || name == UNUSED_TYPE_IGNORE_COMMENT.name()
 }
 
+/// Returns `true` if `comment`, the text of a comment token, holds a
+/// `ty: ignore` or `type: ignore` that ty reads as a suppression, `false`
+/// otherwise.
+pub fn is_suppression_comment(comment: &str) -> bool {
+    SuppressionParser::new(comment, TextRange::up_to(comment.text_len())).any(|c| c.is_ok())
+}
+
 #[salsa::tracked(returns(ref), heap_size=ruff_memory_usage::heap_size)]
 pub(crate) fn suppressions(db: &dyn Db, file: PythonFile<'_>) -> Suppressions {
     let source_file = file.file(db);
