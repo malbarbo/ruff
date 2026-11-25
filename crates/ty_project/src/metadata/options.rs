@@ -384,7 +384,6 @@ impl Options {
                     Some(error) => Err(error),
                     None => Ok(python_environment),
                 },
-                strict_numbers: false,
                 literal_declarations: false,
             },
             diagnostics,

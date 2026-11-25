@@ -2261,72 +2261,17 @@ fn call_type_doesnt_rerun_when_only_callee_changed() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// The messages of the diagnostics for `source`, checked with `strict_numbers` set as given.
-fn strict_numbers_messages(source: &str, strict_numbers: bool) -> anyhow::Result<Vec<String>> {
+/// The messages of the diagnostics for `source`.
+fn messages(source: &str) -> anyhow::Result<Vec<String>> {
     let db = TestDbBuilder::new()
         .with_file("src/main.py", source)
         .build()?;
     let file = system_path_to_file(&db, "src/main.py").expect("file to exist");
-    let mut settings = db.program_settings().clone();
-    settings.strict_numbers = strict_numbers;
-    let file = Program::from_settings(&db, &settings).program_file(&db, file);
+    let file = program_file(&db, file);
     Ok(crate::check_file_unwrap(&db, file)
         .iter()
         .map(|diagnostic| diagnostic.concise_message().to_string())
         .collect())
-}
-
-#[test]
-fn strict_numbers_reject_an_int_where_the_annotation_says_float() -> anyhow::Result<()> {
-    let source = r#"
-from dataclasses import dataclass
-
-@dataclass
-class P:
-    x: float
-
-def f(x: float) -> float:
-    return 1
-
-a: float = 1
-f(2)
-P(3)
-"#;
-    assert_eq!(
-        strict_numbers_messages(source, false)?,
-        Vec::<String>::new()
-    );
-    assert_eq!(
-        strict_numbers_messages(source, true)?,
-        [
-            "Return type does not match returned value: expected `float`, found `Literal[1]`",
-            "Object of type `Literal[1]` is not assignable to `float`",
-            "Argument to function `f` is incorrect: Expected `float`, found `Literal[2]`",
-            "Argument is incorrect: Expected `float`, found `Literal[3]`",
-        ]
-    );
-    Ok(())
-}
-
-#[test]
-fn strict_numbers_keep_int_in_the_parameters_of_a_stub() -> anyhow::Result<()> {
-    let source = r#"
-import math
-from typing import reveal_type
-
-a: float = math.sqrt(2)
-b: float = 2.0 + 1
-reveal_type(2.0)
-"#;
-    assert_eq!(
-        strict_numbers_messages(source, true)?,
-        ["Revealed type: `float`"]
-    );
-    assert_eq!(
-        strict_numbers_messages(source, false)?,
-        ["Revealed type: `float*`"]
-    );
-    Ok(())
 }
 
 #[test]
@@ -2346,207 +2291,14 @@ def f(xs: list[int]) -> None:
     reveal_type(g([]))
 "#;
     assert_eq!(
-        strict_numbers_messages(source, true)?,
+        messages(source)?,
         ["Revealed type: `list[str]`", "Revealed type: `list[int]`",]
     );
     Ok(())
 }
 
 #[test]
-fn strict_numbers_keep_float_in_a_type_that_a_call_infers() -> anyhow::Result<()> {
-    let source = r#"
-from typing import reveal_type
-
-def f(xs: list[float]) -> None:
-    reveal_type(set(xs))
-    reveal_type(list(xs))
-    reveal_type(set([1.0]))
-"#;
-    assert_eq!(
-        strict_numbers_messages(source, true)?,
-        [
-            "Revealed type: `set[float]`",
-            "Revealed type: `list[float]`",
-            "Revealed type: `set[float]`",
-        ]
-    );
-    Ok(())
-}
-
-#[test]
-fn strict_numbers_show_int_or_float_as_a_union() -> anyhow::Result<()> {
-    let source = r#"
-def f(u: int | float) -> float:
-    return u
-
-def g(u: type[int] | type[float]) -> type[float]:
-    return u
-"#;
-    assert_eq!(
-        strict_numbers_messages(source, true)?,
-        [
-            "Return type does not match returned value: expected `float`, found `int | float`",
-            "Return type does not match returned value: expected `type[float]`, found `type[int | float]`",
-        ]
-    );
-    Ok(())
-}
-
-#[test]
-fn strict_numbers_reject_a_bool_where_the_annotation_says_int_or_float() -> anyhow::Result<()> {
-    let source = r#"
-def g() -> int:
-    return 3 > 2
-
-def h(x: float) -> None: ...
-
-def k(b: bool, xs: list[int]) -> None:
-    a: int = True
-    ys: list[int] = [b]
-    zs: list[int] = [n > 0 for n in xs]
-    h(False)
-"#;
-    assert_eq!(
-        strict_numbers_messages(source, false)?,
-        Vec::<String>::new()
-    );
-    assert_eq!(
-        strict_numbers_messages(source, true)?,
-        [
-            "Return type does not match returned value: expected `int`, found `Literal[True]`",
-            "Object of type `Literal[True]` is not assignable to `int`",
-            "Object of type `list[int | bool]` is not assignable to `list[int]`",
-            "Object of type `list[int | bool]` is not assignable to `list[int]`",
-            "Argument to function `h` is incorrect: Expected `float`, found `Literal[False]`",
-        ]
-    );
-    Ok(())
-}
-
-#[test]
-fn strict_numbers_read_a_bool_operand_of_an_integer_operator_as_an_int() -> anyhow::Result<()> {
-    let source = r#"
-from typing import reveal_type
-
-def f(b: bool, x: int, u: bool | int, n: int) -> None:
-    reveal_type(b + b)
-    reveal_type(x * b)
-    reveal_type(b / 2)
-    reveal_type(1.5 + b)
-    reveal_type(x << b)
-    reveal_type(b ** 2)
-    reveal_type(-b)
-    reveal_type(+b)
-    reveal_type(-u)
-    reveal_type(u + 1)
-    reveal_type(True * "ab")
-    n += b
-    reveal_type(n)
-"#;
-    assert_eq!(
-        strict_numbers_messages(source, true)?,
-        [
-            "Revealed type: `int`",
-            "Revealed type: `int`",
-            "Revealed type: `float`",
-            "Revealed type: `float`",
-            "Revealed type: `int`",
-            "Revealed type: `int`",
-            "Revealed type: `int`",
-            "Revealed type: `int`",
-            "Revealed type: `int`",
-            "Revealed type: `int`",
-            "Revealed type: `LiteralString`",
-            "Revealed type: `int`",
-        ]
-    );
-    Ok(())
-}
-
-#[test]
-fn strict_numbers_keep_the_other_errors_of_a_bool_operand() -> anyhow::Result<()> {
-    let source = r#"
-def f(b: bool, x: int, w: bool) -> None:
-    print(x @ b)
-    w += 1
-"#;
-    assert_eq!(
-        strict_numbers_messages(source, true)?,
-        [
-            "Operator `@` is not supported between objects of type `int` and `bool`",
-            "Object of type `int` is not assignable to `bool`",
-        ]
-    );
-    Ok(())
-}
-
-#[test]
-fn strict_numbers_try_the_bool_operand_as_it_is_first() -> anyhow::Result<()> {
-    let source = r#"
-from typing import reveal_type
-
-class C:
-    def __radd__(self, other: bool) -> str:
-        return ""
-
-def f(b: bool, c: C) -> None:
-    reveal_type(b + c)
-"#;
-    assert_eq!(
-        strict_numbers_messages(source, true)?,
-        ["Revealed type: `str`"]
-    );
-    Ok(())
-}
-
-#[test]
-fn strict_numbers_keep_the_comparisons_and_the_logic_of_a_bool() -> anyhow::Result<()> {
-    let source = r#"
-from typing import reveal_type
-
-def f(p: bool, q: bool, n: int) -> None:
-    print(p < q, p >= n, 1 > p, p == q, p != n, p & q, p | q, not p, p and n > 0)
-    print(isinstance(p, int), hash(p), str(p), f"{p}", max(p, q), sum([p, q]))
-    reveal_type(p < q)
-
-def g(v: bool | int) -> None:
-    if isinstance(v, bool):
-        reveal_type(v)
-    else:
-        reveal_type(v)
-"#;
-    assert_eq!(
-        strict_numbers_messages(source, true)?,
-        [
-            "Revealed type: `bool`",
-            "Revealed type: `bool`",
-            "Revealed type: `int & ~bool`",
-        ]
-    );
-    Ok(())
-}
-
-#[test]
-fn strict_numbers_try_the_bool_operand_of_an_ordering_as_it_is_first() -> anyhow::Result<()> {
-    let source = r#"
-from typing import reveal_type
-
-class C:
-    def __gt__(self, other: bool) -> str:
-        return ""
-
-def f(b: bool, c: C) -> None:
-    reveal_type(b < c)
-"#;
-    assert_eq!(
-        strict_numbers_messages(source, true)?,
-        ["Revealed type: `str`"]
-    );
-    Ok(())
-}
-
-#[test]
-fn strict_numbers_give_a_power_the_type_of_its_result() -> anyhow::Result<()> {
+fn a_power_has_the_type_of_its_result() -> anyhow::Result<()> {
     let source = r#"
 from typing import reveal_type
 
@@ -2575,29 +2327,29 @@ def f(n: int, m: int, x: float, y: float, b: bool, u: int | float) -> None:
     reveal_type(x ** b)
 "#;
     assert_eq!(
-        strict_numbers_messages(source, true)?,
+        messages(source)?,
         [
             "Revealed type: `int`",
             "Revealed type: `int`",
             "Revealed type: `Literal[8]`",
-            "Revealed type: `float`",
-            "Revealed type: `float`",
-            "Revealed type: `float`",
-            "Revealed type: `int | float`",
-            "Revealed type: `int | float`",
-            "Revealed type: `float`",
-            "Revealed type: `float`",
+            "Revealed type: `float*`",
+            "Revealed type: `float*`",
+            "Revealed type: `float*`",
             "Revealed type: `float`",
             "Revealed type: `float`",
             "Revealed type: `float`",
             "Revealed type: `float`",
+            "Revealed type: `float*`",
             "Revealed type: `float`",
-            "Revealed type: `int | float`",
-            "Revealed type: `int | float`",
-            "Revealed type: `int | float`",
+            "Revealed type: `float`",
+            "Revealed type: `float`",
+            "Revealed type: `float*`",
+            "Revealed type: `float`",
+            "Revealed type: `float`",
+            "Revealed type: `float`",
             "Revealed type: `int`",
             "Revealed type: `Literal[2]`",
-            "Revealed type: `float`",
+            "Revealed type: `float*`",
             "Revealed type: `float`",
         ]
     );
@@ -2605,7 +2357,7 @@ def f(n: int, m: int, x: float, y: float, b: bool, u: int | float) -> None:
 }
 
 #[test]
-fn strict_numbers_reject_a_power_of_ints_where_the_annotation_says_int() -> anyhow::Result<()> {
+fn a_power_of_ints_is_not_an_int() -> anyhow::Result<()> {
     let source = r#"
 def f(n: int, k: int) -> None:
     a: int = 2 ** n
@@ -2613,17 +2365,17 @@ def f(n: int, k: int) -> None:
     c: int | float = 2 ** n
 "#;
     assert_eq!(
-        strict_numbers_messages(source, true)?,
+        messages(source)?,
         [
-            "Object of type `int | float` is not assignable to `int`",
-            "Object of type `int | float` is not assignable to `int`",
+            "Object of type `float` is not assignable to `int`",
+            "Object of type `float` is not assignable to `int`",
         ]
     );
     Ok(())
 }
 
 #[test]
-fn strict_numbers_keep_the_power_of_other_classes() -> anyhow::Result<()> {
+fn a_power_of_other_classes_keeps_its_type() -> anyhow::Result<()> {
     let source = r#"
 from typing import TypeVar, reveal_type
 
@@ -2643,7 +2395,7 @@ def f(n: int, r: R, mi: MyInt, t: T) -> None:
     reveal_type(t ** 2)
 "#;
     assert_eq!(
-        strict_numbers_messages(source, true)?,
+        messages(source)?,
         [
             "Revealed type: `str`",
             "Revealed type: `str`",
@@ -2654,7 +2406,7 @@ def f(n: int, r: R, mi: MyInt, t: T) -> None:
 }
 
 #[test]
-fn strict_numbers_give_pow_the_type_of_a_power() -> anyhow::Result<()> {
+fn pow_has_the_type_of_a_power() -> anyhow::Result<()> {
     let source = r#"
 from typing import reveal_type
 
@@ -2670,13 +2422,13 @@ def f(n: int, m: int, x: float, y: float) -> None:
     reveal_type(p(x, y))
 "#;
     assert_eq!(
-        strict_numbers_messages(source, true)?,
+        messages(source)?,
         [
-            "Revealed type: `int | float`",
             "Revealed type: `float`",
             "Revealed type: `float`",
-            "Revealed type: `int | float`",
-            "Revealed type: `int | float`",
+            "Revealed type: `float*`",
+            "Revealed type: `float`",
+            "Revealed type: `float`",
             "Revealed type: `int`",
             "Revealed type: `int`",
             "Revealed type: `float`",

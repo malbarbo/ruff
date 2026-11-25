@@ -1200,14 +1200,6 @@ impl<'db> FmtDetailed<'db> for DisplayRepresentation<'_, 'db> {
                     (_, Some(KnownClass::NoDefaultType)) => {
                         f.with_type(self.ty).write_str("NoDefault")
                     }
-                    // With strict numbers, the annotation `float` means this type, so it
-                    // needs no mark.
-                    (_, Some(KnownClass::Float)) if self.env.program(db).strict_numbers(db) => {
-                        class
-                            .class_literal(self.db)
-                            .display_with(self.db, self.settings.clone())
-                            .fmt_detailed(f)
-                    }
                     (_, Some(KnownClass::Float | KnownClass::Complex)) => {
                         f.set_invalid_type_annotation();
                         class
@@ -3198,13 +3190,7 @@ const UNION_POLICY: TruncationPolicy = TruncationPolicy {
 /// ```python
 /// def f(value: str | float) -> None: ...
 /// ```
-///
-/// With strict numbers, the annotation `float` means `float` alone, so `int | float` has no
-/// shorter spelling.
-fn numeric_tower_group(
-    known_classes: impl IntoIterator<Item = KnownClass>,
-    strict_numbers: bool,
-) -> Option<KnownUnion> {
+fn numeric_tower_group(known_classes: impl IntoIterator<Item = KnownClass>) -> Option<KnownUnion> {
     let mut has_int = false;
     let mut has_float = false;
     let mut has_complex = false;
@@ -3220,7 +3206,7 @@ fn numeric_tower_group(
 
     match (has_int, has_float, has_complex) {
         (true, true, true) => Some(KnownUnion::Complex),
-        (true, true, false) if !strict_numbers => Some(KnownUnion::Float),
+        (true, true, false) => Some(KnownUnion::Float),
         _ => None,
     }
 }
@@ -3272,14 +3258,11 @@ impl<'db> FmtDetailed<'db> for DisplayUnionType<'_, 'db> {
             NumericTowerDisplay::Canonical
         )
         .then(|| {
-            numeric_tower_group(
-                elements.iter().filter_map(|element| {
-                    element
-                        .as_nominal_instance()
-                        .and_then(|instance| instance.known_class(db))
-                }),
-                self.env.program(db).strict_numbers(db),
-            )
+            numeric_tower_group(elements.iter().filter_map(|element| {
+                element
+                    .as_nominal_instance()
+                    .and_then(|instance| instance.known_class(db))
+            }))
         })
         .flatten();
         let is_numeric_tower_element = |element: Type<'db>| {
@@ -3471,7 +3454,6 @@ impl<'db> FmtDetailed<'db> for DisplaySubclassOfGroup<'_, 'db> {
                 self.types
                     .iter()
                     .filter_map(|subclass_of| subclass_of_known_class(self.db, *subclass_of)),
-                self.env.program(db).strict_numbers(db),
             )
         })
         .flatten();

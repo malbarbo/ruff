@@ -578,12 +578,7 @@ fn shape<'db>(db: &'db dyn Db, env: &ProgramEnvironment<'db>, ty: Type<'db>) -> 
             }
             None => Shape::Other(ty.display(db, env).to_string()),
         },
-        // With strict numbers, `float` means `float` alone, and `int | float` is a union.
-        Type::Union(u)
-            if u.known(db) == Some(KnownUnion::Float) && !env.program(db).strict_numbers(db) =>
-        {
-            Shape::Float
-        }
+        Type::Union(u) if u.known(db) == Some(KnownUnion::Float) => Shape::Float,
         Type::Union(u) => Shape::Union(u.elements(db).iter().map(|t| shape(db, env, *t)).collect()),
         // A test such as `x == 0` narrows `int` to `int & ~Literal[0]`. The
         // negative part only removes values, so the value keeps its shape.
@@ -649,27 +644,15 @@ mod tests {
     use ruff_db::files::system_path_to_file;
     use ruff_db::parsed::parsed_module;
     use ruff_python_ast::visitor::source_order::{self, SourceOrderVisitor};
-    use ty_python_core::TestProgramDb as _;
-    use ty_python_core::program::Program;
+    use ty_python_core::ProgramFile;
 
     fn with_model(source: &str, f: impl FnOnce(&SemanticModel<'_>, &ast::ModModule)) {
-        with_model_numbers(source, false, f);
-    }
-
-    /// [`with_model`], with `strict_numbers` set as given.
-    fn with_model_numbers(
-        source: &str,
-        strict_numbers: bool,
-        f: impl FnOnce(&SemanticModel<'_>, &ast::ModModule),
-    ) {
         let db = TestDbBuilder::new()
             .with_file("/src/main.py", source)
             .build()
             .unwrap();
         let file = system_path_to_file(&db, "/src/main.py").unwrap();
-        let mut settings = db.program_settings().clone();
-        settings.strict_numbers = strict_numbers;
-        let file = Program::from_settings(&db, &settings).program_file(&db, file);
+        let file = ProgramFile::new(&db, file, db.program_environment().program(&db));
         let module = parsed_module(&db, file.python_file(&db)).load(&db);
         let model = SemanticModel::new(&db, file);
         f(&model, module.syntax());
@@ -677,11 +660,6 @@ mod tests {
 
     /// The shape of every name `x` that the program reads, in order.
     fn shapes_of(source: &str, name: &str) -> Vec<Shape> {
-        shapes_of_numbers(source, name, false)
-    }
-
-    /// [`shapes_of`], with `strict_numbers` set as given.
-    fn shapes_of_numbers(source: &str, name: &str, strict_numbers: bool) -> Vec<Shape> {
         struct Names<'a, 'm> {
             model: &'a SemanticModel<'m>,
             name: &'a str,
@@ -699,7 +677,7 @@ mod tests {
             }
         }
         let mut found = Vec::new();
-        with_model_numbers(source, strict_numbers, |model, module| {
+        with_model(source, |model, module| {
             let mut names = Names {
                 model,
                 name,
@@ -733,18 +711,13 @@ def f(i: int, x: float, b: bool, s: str, n: None) -> None:
     }
 
     #[test]
-    fn int_or_float_is_a_union_with_strict_numbers() {
+    fn int_or_float_is_float() {
         let source = "\
 def f(x: float, y: int | float) -> None:
     x; y
 ";
         assert_eq!(shapes_of(source, "x"), [Shape::Float]);
         assert_eq!(shapes_of(source, "y"), [Shape::Float]);
-        assert_eq!(shapes_of_numbers(source, "x", true), [Shape::Float]);
-        assert_eq!(
-            shapes_of_numbers(source, "y", true),
-            [Shape::Union(vec![Shape::Int, Shape::Float])]
-        );
     }
 
     #[test]
