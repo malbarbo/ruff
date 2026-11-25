@@ -58,8 +58,8 @@ reveal_type(2**largest_u32)  # revealed: int
 
 def variable(x: int):
     reveal_type(x**2)  # revealed: int
-    reveal_type(2**x)  # revealed: Any
-    reveal_type(x**x)  # revealed: Any
+    reveal_type(2**x)  # revealed: float
+    reveal_type(x**x)  # revealed: float
 ```
 
 If the second argument is \<0, a `float` is returned at runtime. If the first argument is \<0 but

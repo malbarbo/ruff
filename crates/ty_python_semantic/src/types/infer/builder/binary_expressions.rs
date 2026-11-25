@@ -1315,8 +1315,8 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
     }
 }
 
-/// Returns the type of `base ** exponent` under `strict_numbers` when both are `int`, `float`,
-/// or `bool`, and `None` otherwise.
+/// Returns the type of `base ** exponent` when both are `int`, `float`, or `bool`, and `None`
+/// otherwise.
 ///
 /// The stubs give `Any` for an exponent that is not a small literal. Python decides the type by
 /// the sign of an `int` exponent, so `2 ** 3` is `8` and `2 ** -1` is `0.5`. A `bool` counts as
@@ -1336,9 +1336,6 @@ pub(crate) fn strict_pow_type<'db>(
         Float,
     }
 
-    if !env.program(db).strict_numbers(db) {
-        return None;
-    }
     if let Type::Union(union) = base {
         let mut builder = UnionBuilder::new(db, env);
         for element in union.elements(db) {
