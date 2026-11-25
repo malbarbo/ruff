@@ -2527,7 +2527,7 @@ impl<'db> Bindings<'db> {
                                 overload.parameter_types()
                                 && modulus.is_none_or(|modulus| modulus.is_none(db))
                                 && let Some(ty) =
-                                    crate::types::infer::strict_pow_type(db, env, *base, *exponent)
+                                    crate::types::infer::pow_type(db, env, *base, *exponent)
                             {
                                 overload.set_return_type(ty);
                             }

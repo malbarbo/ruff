@@ -767,7 +767,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                 if !matches!(
                     (left, right),
                     (Type::LiteralValue(_), Type::LiteralValue(_))
-                ) && let Some(ty) = strict_pow_type(db, env, left, right) =>
+                ) && let Some(ty) = pow_type(db, env, left, right) =>
             {
                 Some(ty)
             }
@@ -1272,7 +1272,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
 /// the sign of an `int` exponent, so `2 ** 3` is `8` and `2 ** -1` is `0.5`. A `bool` counts as
 /// an `int` that is never negative. A `float` exponent gives `float` because spython rejects the
 /// cases where Python gives a `complex`.
-pub(crate) fn strict_pow_type<'db>(
+pub(crate) fn pow_type<'db>(
     db: &'db dyn Db,
     env: &ProgramEnvironment<'db>,
     base: Type<'db>,
@@ -1289,14 +1289,14 @@ pub(crate) fn strict_pow_type<'db>(
     if let Type::Union(union) = base {
         let mut builder = UnionBuilder::new(db, env);
         for element in union.elements(db) {
-            builder = builder.add(strict_pow_type(db, env, *element, exponent)?);
+            builder = builder.add(pow_type(db, env, *element, exponent)?);
         }
         return Some(builder.build());
     }
     if let Type::Union(union) = exponent {
         let mut builder = UnionBuilder::new(db, env);
         for element in union.elements(db) {
-            builder = builder.add(strict_pow_type(db, env, base, *element)?);
+            builder = builder.add(pow_type(db, env, base, *element)?);
         }
         return Some(builder.build());
     }

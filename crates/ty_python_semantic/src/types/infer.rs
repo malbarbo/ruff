@@ -72,7 +72,7 @@ use ty_python_core::unpack::Unpack;
 use ty_python_core::{ExpressionNodeKey, SemanticIndex, Statement, Truthiness, semantic_index};
 
 mod builder;
-pub(crate) use builder::strict_pow_type;
+pub(crate) use builder::pow_type;
 mod legacy_type_alias;
 use legacy_type_alias::legacy_type_alias_definition;
 pub(super) use legacy_type_alias::legacy_type_alias_parameters;
