@@ -630,7 +630,14 @@ fn shape<'db>(db: &'db dyn Db, env: &ProgramEnvironment<'db>, ty: Type<'db>) -> 
             | KnownInstanceType::LiteralStringAlias(_),
         ) => Shape::TypeForm,
         Type::NewTypeInstance(newtype) => shape(db, env, newtype.concrete_base_type(db)),
-        Type::TypeAlias(alias) => shape(db, env, alias.value_type(db)),
+        // An alias keeps the union it names, so `type Number = int | float` stays a union where
+        // the annotation `float` gives `Shape::Float`.
+        Type::TypeAlias(alias) => match alias.value_type(db) {
+            Type::Union(u) => {
+                Shape::Union(u.elements(db).iter().map(|t| shape(db, env, *t)).collect())
+            }
+            value => shape(db, env, value),
+        },
         Type::Never => Shape::Never,
         Type::Dynamic(_) => Shape::Any,
         _ => Shape::Other(ty.display(db, env).to_string()),
@@ -718,6 +725,29 @@ def f(x: float, y: int | float) -> None:
 ";
         assert_eq!(shapes_of(source, "x"), [Shape::Float]);
         assert_eq!(shapes_of(source, "y"), [Shape::Float]);
+    }
+
+    #[test]
+    fn an_alias_of_int_or_float_is_a_union() {
+        let source = "\
+type Number = int | float
+
+def f(a: Number) -> None:
+    a
+    if isinstance(a, int):
+        a
+    else:
+        a
+";
+        assert_eq!(
+            shapes_of(source, "a"),
+            [
+                Shape::Union(vec![Shape::Int, Shape::Float]),
+                Shape::Union(vec![Shape::Int, Shape::Float]),
+                Shape::Int,
+                Shape::Float
+            ]
+        );
     }
 
     #[test]
